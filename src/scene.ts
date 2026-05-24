@@ -193,19 +193,42 @@ export function createScene(canvas: HTMLCanvasElement): SceneRefs {
   // Tall grass blades — thin-instanced field with wind shader
   const grass = createGrassField(scene, groundY, 2.05);
 
-  // Mountain ring in the distance — faceted peaks with snow-capped tops
+  // Mountain ring in the distance — wide, overlapping snow-capped peaks
   const mountainMat = createMountainMaterial(scene);
   const mountains: Mesh[] = [];
-  const mountainCount = 16;
-  for (let i = 0; i < mountainCount; i++) {
-    const h = 5 + Math.random() * 10;
-    const baseR = 3.5 + Math.random() * 4.5;
-    const angle = (i / mountainCount) * Math.PI * 2 + (Math.random() - 0.5) * 0.28;
-    const dist = 28 + Math.random() * 16;
+  // Two layers: a front range of stockier hills, a back range of bigger peaks.
+  // Counts are chosen so neighbours overlap and the silhouette reads as a range.
+  const frontCount = 22;
+  for (let i = 0; i < frontCount; i++) {
+    const h = 4 + Math.random() * 6;
+    const baseR = 6 + Math.random() * 4;
+    const angle = (i / frontCount) * Math.PI * 2 + (Math.random() - 0.5) * 0.2;
+    const dist = 22 + Math.random() * 6;
     mountains.push(
       makeMountain(
         scene,
-        `mountain${i}`,
+        `mountainFront${i}`,
+        {
+          x: Math.cos(angle) * dist,
+          z: Math.sin(angle) * dist,
+          baseRadius: baseR,
+          height: h,
+          groundY,
+        },
+        mountainMat,
+      ),
+    );
+  }
+  const backCount = 18;
+  for (let i = 0; i < backCount; i++) {
+    const h = 9 + Math.random() * 8;
+    const baseR = 8 + Math.random() * 5;
+    const angle = (i / backCount) * Math.PI * 2 + (Math.random() - 0.5) * 0.25;
+    const dist = 32 + Math.random() * 10;
+    mountains.push(
+      makeMountain(
+        scene,
+        `mountainBack${i}`,
         {
           x: Math.cos(angle) * dist,
           z: Math.sin(angle) * dist,
@@ -917,8 +940,8 @@ type MountainSpec = {
 
 function makeMountain(scene: Scene, name: string, spec: MountainSpec, mat: ShaderMaterial): Mesh {
   // K sides per ring — keep low for a chunky/low-poly silhouette.
-  const K = 7 + Math.floor(Math.random() * 3);
-  const RINGS = 4; // ring count below the apex
+  const K = 9 + Math.floor(Math.random() * 3);
+  const RINGS = 5; // ring count below the summit ring
   const positions: number[] = [];
   const uvs: number[] = [];
   const indices: number[] = [];
@@ -932,23 +955,38 @@ function makeMountain(scene: Scene, name: string, spec: MountainSpec, mat: Shade
     return ((h ^ (h >>> 16)) >>> 0) / 4294967295;
   };
 
+  // Cone profile: wider exponent (<1) keeps the silhouette stocky instead of
+  // tapering to a sharp point. Each ring carries a noticeable radius all the
+  // way up; the summit is a small jagged ring + apex, not a single spike.
   for (let r = 0; r < RINGS; r++) {
-    const t = r / RINGS;                       // 0 at base, → 1 at apex
-    const baseY = Math.pow(t, 1.05) * spec.height;
-    const baseRad = Math.pow(1 - t, 1.25) * spec.baseRadius;
+    const t = r / RINGS;                       // 0 at base, → 1 at top ring
+    const baseY = Math.pow(t, 0.85) * spec.height;
+    const baseRad = Math.pow(1 - t, 0.6) * spec.baseRadius;
     for (let k = 0; k < K; k++) {
       const angle = (k / K) * Math.PI * 2;
-      const rJ = (jr(r * 1009 + k, 17) - 0.5) * 0.35;
-      const yJ = (jr(r * 1009 + k, 31) - 0.5) * 0.14 * spec.height;
+      const rJ = (jr(r * 1009 + k, 17) - 0.5) * 0.4;
+      const yJ = (jr(r * 1009 + k, 31) - 0.5) * 0.12 * spec.height;
       const radius = baseRad * (1 + rJ);
       positions.push(Math.cos(angle) * radius, baseY + yJ, Math.sin(angle) * radius);
       uvs.push(k / K, t);
     }
   }
-  // Apex vertex (slightly off-center for a more natural peak)
-  const apexX = (jr(99, 1) - 0.5) * 0.15 * spec.baseRadius;
-  const apexZ = (jr(99, 2) - 0.5) * 0.15 * spec.baseRadius;
-  const apexIdx = RINGS * K;
+  // Summit ring — small jagged ring just below the apex so the peak reads as
+  // a chunky ridge rather than a sharp cone tip.
+  const summitRad = 0.16 * spec.baseRadius;
+  const summitY = spec.height * 0.92;
+  for (let k = 0; k < K; k++) {
+    const angle = (k / K) * Math.PI * 2;
+    const rJ = (jr(700 + k, 23) - 0.5) * 0.7;
+    const yJ = (jr(700 + k, 41) - 0.5) * 0.18 * spec.height;
+    positions.push(Math.cos(angle) * summitRad * (1 + rJ), summitY + yJ, Math.sin(angle) * summitRad * (1 + rJ));
+    uvs.push(k / K, 0.95);
+  }
+  // Apex — well off-center so each peak leans differently
+  const apexX = (jr(99, 1) - 0.5) * 0.3 * spec.baseRadius;
+  const apexZ = (jr(99, 2) - 0.5) * 0.3 * spec.baseRadius;
+  const summitStart = RINGS * K;
+  const apexIdx = summitStart + K;
   positions.push(apexX, spec.height, apexZ);
   uvs.push(0.5, 1);
 
@@ -963,11 +1001,20 @@ function makeMountain(scene: Scene, name: string, spec: MountainSpec, mat: Shade
       indices.push(a, c, b, b, c, d);
     }
   }
-  // Apex fan from the top ring
-  const topRing = (RINGS - 1) * K;
+  // Connect last main ring to the summit ring
+  const lastMain = (RINGS - 1) * K;
   for (let k = 0; k < K; k++) {
     const k1 = (k + 1) % K;
-    indices.push(topRing + k, apexIdx, topRing + k1);
+    const a = lastMain + k;
+    const b = lastMain + k1;
+    const c = summitStart + k;
+    const d = summitStart + k1;
+    indices.push(a, c, b, b, c, d);
+  }
+  // Apex fan from the summit ring
+  for (let k = 0; k < K; k++) {
+    const k1 = (k + 1) % K;
+    indices.push(summitStart + k, apexIdx, summitStart + k1);
   }
 
   const mesh = new Mesh(name, scene);

@@ -21,6 +21,7 @@ interface VFXRefs {
   hudRoot: HTMLElement;
   cameraShake: (intensity: number, duration: number) => void;
   getIntensity: () => number; // 0..1, scales effect strength
+  getLevel: () => number;     // current player level, drives effect probability
 }
 
 const CATEGORY_COLOR: Record<HitCategory, [Color4, Color4]> = {
@@ -41,12 +42,35 @@ const CATEGORY_INTENSITY: Record<HitCategory, number> = {
   legendary: 1.4,
 };
 
-// Thresholds (visual intensity 0..1) — below these, effect is suppressed
-const FIRE_THRESHOLD = 0.15;        // ~ level 4
-const LIGHTNING_THRESHOLD = 0.25;   // ~ level 6
-const FLASH_THRESHOLD = 0.2;        // ~ level 5
+// Hit-quality boosts the probability of the elemental effects.
+// A legendary at any level will almost always trigger all three; an ok at
+// level 1 will almost never trigger anything.
+const HIT_PROB_MULT: Record<HitCategory, number> = {
+  miss: 0,
+  ok: 0.55,
+  good: 1.0,
+  great: 1.6,
+  perfect: 2.5,
+  legendary: 4.0,
+};
+
+// Per-effect probability curve: chance = (base + level * perLevel) * hitMult,
+// capped at 0.9. Each effect rolls independently, so high levels see
+// combinations (fire+lightning, magic+fire, all three…) rather than every
+// click looking identical.
+const EFFECT_CHANCE = {
+  fire:      { base: 0.02, perLevel: 0.025 },  // L1 great ≈ 7%,  L11 great ≈ 47%, L20 legendary capped
+  lightning: { base: 0.01, perLevel: 0.020 },  // L1 great ≈ 5%,  L11 great ≈ 37%
+  magic:     { base: 0.00, perLevel: 0.018 },  // L1 great ≈ 3%,  L11 great ≈ 32%
+};
+
 const SHOCKWAVE_THRESHOLD = 0.1;    // ~ level 3
 const STREAK_FIRE_THRESHOLD = 0.2;  // ~ level 5
+
+function rollChance(curve: { base: number; perLevel: number }, level: number, hitMult: number): boolean {
+  const p = Math.min(0.9, (curve.base + level * curve.perLevel) * hitMult);
+  return Math.random() < p;
+}
 
 export class VFX {
   private refs: VFXRefs;
@@ -67,6 +91,7 @@ export class VFX {
 
   triggerHit(result: HitResult) {
     const vis = this.refs.getIntensity();
+    const level = this.refs.getLevel();
     const cat = result.category;
 
     if (cat === "miss") {
@@ -76,44 +101,46 @@ export class VFX {
     }
 
     const catI = CATEGORY_INTENSITY[cat];
-    // Effect scale combines category and player progression
+    const hitMult = HIT_PROB_MULT[cat];
+    // Base effect scale for the always-on visuals (burst, shockwave, fill flash).
     const effect = catI * (0.25 + 0.75 * vis);
 
+    // Always: small burst + a brief fill-light pulse + a soft shake
     this.spawnBurst(cat, effect);
+    this.flashLight(cat, effect);
+    this.refs.cameraShake(0.03 + effect * 0.15, 0.16 + effect * 0.15);
 
+    // Shockwave fires on most hits but is now visually lighter
     if (vis > SHOCKWAVE_THRESHOLD) {
-      this.spawnShockwave(cat, effect);
+      this.spawnShockwave(cat, effect * 0.75);
     }
 
-    if (vis > 0.05) {
-      this.flashLight(cat, effect);
-    }
-
-    if (vis > 0.05) {
-      this.refs.cameraShake(0.03 + effect * 0.18, 0.16 + effect * 0.18);
-    }
-
-    if (vis > FIRE_THRESHOLD && (cat === "great" || cat === "perfect" || cat === "legendary")) {
+    // === Elemental effects — independent probability rolls per click ===
+    // Each one scales with player level AND the hit category. The 0.95 cap
+    // means even legendary-at-max-level still has a sliver of variance.
+    if (rollChance(EFFECT_CHANCE.fire, level, hitMult)) {
       this.spawnFire(effect);
     }
-
-    if (vis > LIGHTNING_THRESHOLD && (cat === "perfect" || cat === "legendary")) {
-      this.spawnLightning(cat === "legendary" ? 6 : 3);
+    if (rollChance(EFFECT_CHANCE.lightning, level, hitMult)) {
+      const bolts = cat === "legendary" ? 6 : cat === "perfect" ? 4 : 2 + Math.floor(Math.random() * 2);
+      this.spawnLightning(bolts);
+    }
+    if (rollChance(EFFECT_CHANCE.magic, level, hitMult)) {
+      this.spawnMagic(effect);
     }
 
-    if (vis > FLASH_THRESHOLD && (cat === "perfect" || cat === "legendary")) {
-      this.screenFlash(cat === "legendary" ? 0.9 : 0.6);
-    }
-
-    if (vis > LIGHTNING_THRESHOLD && result.isCrit) {
+    // Crits get a guaranteed sparkle of lightning/magic regardless of roll
+    if (result.isCrit) {
       this.spawnLightning(2);
-    }
-    if (vis > FLASH_THRESHOLD && result.isCrit) {
-      this.screenFlash(0.4);
+      this.spawnMagic(effect * 0.7);
     }
 
-    if (cat === "legendary" && vis > 0.4) {
-      this.spawnRays();
+    // Legendary keeps the full-screen celebration
+    if (cat === "legendary") {
+      this.screenFlash(0.85);
+      if (vis > 0.3) this.spawnRays();
+    } else if (cat === "perfect" && Math.random() < 0.4) {
+      this.screenFlash(0.45);
     }
   }
 
@@ -325,6 +352,61 @@ export class VFX {
         }
       }, 28);
     }
+  }
+
+  private spawnMagic(effect: number) {
+    const { scene, buttonPos } = this.refs;
+    const center = buttonPos();
+
+    // Swirling violet plume — orbits the button axis as it rises
+    const ribbon = new ParticleSystem("magicRibbon", 220, scene);
+    ribbon.particleTexture = this.dotTex;
+    ribbon.emitter = center;
+    ribbon.minEmitBox = new Vector3(-0.05, -0.1, -0.05);
+    ribbon.maxEmitBox = new Vector3(0.05, 0.1, 0.05);
+    ribbon.color1 = new Color4(0.85, 0.45, 1.0, 1);
+    ribbon.color2 = new Color4(0.55, 0.25, 0.95, 1);
+    ribbon.colorDead = new Color4(0.25, 0.05, 0.55, 0);
+    ribbon.minSize = 0.10 + effect * 0.05;
+    ribbon.maxSize = 0.28 + effect * 0.18;
+    ribbon.minLifeTime = 0.55;
+    ribbon.maxLifeTime = 1.15;
+    ribbon.emitRate = 600;
+    ribbon.gravity = new Vector3(0, 3.5, 0);
+    ribbon.direction1 = new Vector3(-1.6, 1.2, -1.6);
+    ribbon.direction2 = new Vector3(1.6, 3.0, 1.6);
+    ribbon.minEmitPower = 0.9;
+    ribbon.maxEmitPower = 2.2;
+    ribbon.minAngularSpeed = -Math.PI * 1.5;
+    ribbon.maxAngularSpeed = Math.PI * 1.5;
+    ribbon.updateSpeed = 0.015;
+    ribbon.targetStopDuration = 0.12;
+    ribbon.disposeOnStop = true;
+    ribbon.blendMode = ParticleSystem.BLENDMODE_ADD;
+    ribbon.createSphereEmitter(0.18);
+    ribbon.start();
+
+    // Bright pinpoint sparkles drifting upward — the "rune dust" on top
+    const sparks = new ParticleSystem("magicSparks", 70, scene);
+    sparks.particleTexture = this.dotTex;
+    sparks.emitter = center;
+    sparks.color1 = new Color4(1.0, 0.9, 1.0, 1);
+    sparks.color2 = new Color4(0.85, 0.6, 1.0, 1);
+    sparks.colorDead = new Color4(1, 1, 1, 0);
+    sparks.minSize = 0.04;
+    sparks.maxSize = 0.11 + effect * 0.05;
+    sparks.minLifeTime = 0.9;
+    sparks.maxLifeTime = 1.8;
+    sparks.emitRate = 140;
+    sparks.gravity = new Vector3(0, 1.8, 0);
+    sparks.direction1 = new Vector3(-2.5, 1.5, -2.5);
+    sparks.direction2 = new Vector3(2.5, 4, 2.5);
+    sparks.minEmitPower = 1.5;
+    sparks.maxEmitPower = 3.5;
+    sparks.targetStopDuration = 0.18;
+    sparks.disposeOnStop = true;
+    sparks.blendMode = ParticleSystem.BLENDMODE_ADD;
+    sparks.start();
   }
 
   private spawnRays() {

@@ -527,18 +527,19 @@ export function createScene(canvas: HTMLCanvasElement): SceneRefs {
     currentLevel = level;
     const v = visualIntensity(level);
 
-    // Pipeline progression
-    pipeline.bloomThreshold = Math.max(0.3, 0.95 - v * 0.6);
-    pipeline.bloomWeight = v * 0.9;
+    // Pipeline progression — keep the constant "shine" restrained; punchy moments
+    // come from the discrete VFX (fire/lightning/magic) instead of constant bloom.
+    pipeline.bloomThreshold = Math.max(0.5, 0.95 - v * 0.4);
+    pipeline.bloomWeight = v * 0.5;
     pipeline.imageProcessing.vignetteEnabled = level >= 3;
     pipeline.imageProcessing.vignetteWeight = Math.max(0, (level - 2) / 18) * 6;
-    pipeline.imageProcessing.contrast = 1.0 + v * 0.15;
-    pipeline.imageProcessing.exposure = 1.0 + v * 0.08;
-    pipeline.chromaticAberrationEnabled = level >= 8;
-    pipeline.chromaticAberration.aberrationAmount = Math.max(0, (level - 8) / 12) * 1.4;
-    pipeline.grainEnabled = level >= 6;
-    pipeline.grain.intensity = Math.max(0, (level - 6) / 14) * 7;
-    glowLayer.intensity = v * 1.4;
+    pipeline.imageProcessing.contrast = 1.0 + v * 0.10;
+    pipeline.imageProcessing.exposure = 1.0 + v * 0.05;
+    pipeline.chromaticAberrationEnabled = level >= 10;
+    pipeline.chromaticAberration.aberrationAmount = Math.max(0, (level - 10) / 12) * 1.0;
+    pipeline.grainEnabled = level >= 8;
+    pipeline.grain.intensity = Math.max(0, (level - 8) / 14) * 5;
+    glowLayer.intensity = v * 0.7;
 
     // Halo + core fade in
     const haloT = clamp01((level - 2) / 6);

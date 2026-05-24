@@ -48,43 +48,61 @@ const vfx = new VFX({
 });
 
 // === Click handler ===
-function handleClick(screenX: number, screenY: number) {
-  const result = state.click();
-  const intensity = refs.intensity();
+// Recovery + press flow:
+//   - click input    → start recovery, kick the down/up press animation
+//   - bottom of press → resolve hit, fire all VFX + HUD updates
+//   - further clicks ignored until recovery completes
+function tryClick(screenX: number, screenY: number) {
+  if (!state.canClick()) return;
+  state.startRecovery();
+  hud.setRecovery(0);
 
-  refs.pressButton();
-  vfx.triggerHit(result);
-  vfx.setStreakTier(state.streakTier);
+  refs.pressButton(() => {
+    // Effects line up with the visual impact at the bottom of the press
+    const result = state.click();
+    const intensity = refs.intensity();
 
-  hud.showHit(result, screenX, screenY, intensity);
-  hud.pulseStreak();
-  hud.refresh(state);
+    vfx.triggerHit(result);
+    vfx.setStreakTier(state.streakTier);
 
-  // Body-shake fallback for misses only at higher intensity
-  if (result.category === "miss" && intensity > 0.3) {
-    hud.shake();
-  }
+    hud.showHit(result, screenX, screenY, intensity);
+    hud.pulseStreak();
+    hud.refresh(state);
 
-  if (result.leveledUp) {
-    refs.applyVisualLevel(state.level);
-    refs.cycleCameraAngle(1.4);
-    const newIntensity = refs.intensity();
-    hud.showLevelUp(result.newLevel, newIntensity);
-    cameraShake(0.08 + newIntensity * 0.5, 0.4 + newIntensity * 0.5);
-    if (newIntensity > 0.25) {
-      // Celebratory burst on level-up
-      vfx.triggerHit({ ...result, category: "legendary" });
+    // Body-shake fallback for misses only at higher intensity
+    if (result.category === "miss" && intensity > 0.3) {
+      hud.shake();
     }
-  }
+
+    if (result.leveledUp) {
+      refs.applyVisualLevel(state.level);
+      refs.cycleCameraAngle(1.4);
+      const newIntensity = refs.intensity();
+      hud.showLevelUp(result.newLevel, newIntensity);
+      cameraShake(0.08 + newIntensity * 0.5, 0.4 + newIntensity * 0.5);
+      if (newIntensity > 0.25) {
+        // Celebratory burst on level-up
+        vfx.triggerHit({ ...result, category: "legendary" });
+      }
+    }
+  });
 }
 
 refs.onClick.add(() => {
-  handleClick(refs.scene.pointerX, refs.scene.pointerY);
+  tryClick(refs.scene.pointerX, refs.scene.pointerY);
 });
 
 window.addEventListener("keydown", (e) => {
   if (e.code === "Space") {
     e.preventDefault();
-    handleClick(window.innerWidth / 2, window.innerHeight / 2);
+    tryClick(window.innerWidth / 2, window.innerHeight / 2);
   }
 });
+
+// Drive the HUD recovery bar each frame
+refs.scene.onBeforeRenderObservable.add(() => {
+  hud.setRecovery(state.recoveryProgress());
+});
+
+// Show ready state at startup
+hud.setRecovery(1);

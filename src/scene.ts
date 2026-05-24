@@ -44,7 +44,7 @@ export interface SceneRefs {
   fillLight: PointLight;
   hemiLight: HemisphericLight;
   onClick: Observable<void>;
-  pressButton: () => void;
+  pressButton: (onBottom?: () => void) => void;
   getButtonWorldPos: () => Vector3;
   applyVisualLevel: (level: number) => void;
   intensity: () => number;
@@ -193,36 +193,52 @@ export function createScene(canvas: HTMLCanvasElement): SceneRefs {
   // Tall grass blades — thin-instanced field with wind shader
   const grass = createGrassField(scene, groundY, 2.05);
 
-  // Mountain ring in the distance — low-poly cones
+  // Mountain ring in the distance — wide, overlapping snow-capped peaks
+  const mountainMat = createMountainMaterial(scene);
   const mountains: Mesh[] = [];
-  const mountainCount = 14;
-  for (let i = 0; i < mountainCount; i++) {
-    const h = 5 + Math.random() * 9;
-    const d = 7 + Math.random() * 8;
-    const m = MeshBuilder.CreateCylinder(
-      `mountain${i}`,
-      {
-        diameterTop: 0.15,
-        diameterBottom: d,
-        height: h,
-        tessellation: 6 + Math.floor(Math.random() * 3),
-      },
-      scene,
+  // Two layers: a front range of stockier hills, a back range of bigger peaks.
+  // Counts are chosen so neighbours overlap and the silhouette reads as a range.
+  const frontCount = 22;
+  for (let i = 0; i < frontCount; i++) {
+    const h = 4 + Math.random() * 6;
+    const baseR = 6 + Math.random() * 4;
+    const angle = (i / frontCount) * Math.PI * 2 + (Math.random() - 0.5) * 0.2;
+    const dist = 22 + Math.random() * 6;
+    mountains.push(
+      makeMountain(
+        scene,
+        `mountainFront${i}`,
+        {
+          x: Math.cos(angle) * dist,
+          z: Math.sin(angle) * dist,
+          baseRadius: baseR,
+          height: h,
+          groundY,
+        },
+        mountainMat,
+      ),
     );
-    const angle = (i / mountainCount) * Math.PI * 2 + (Math.random() - 0.5) * 0.3;
-    const dist = 28 + Math.random() * 16;
-    m.position.x = Math.cos(angle) * dist;
-    m.position.z = Math.sin(angle) * dist;
-    m.position.y = groundY + h / 2;
-    m.rotation.y = Math.random() * Math.PI * 2;
-    m.rotation.z = (Math.random() - 0.5) * 0.18;
-    const mMat = new StandardMaterial(`mountainMat${i}`, scene);
-    const shade = 0.32 + Math.random() * 0.15;
-    mMat.diffuseColor = new Color3(shade * 0.9, shade * 0.88, shade);
-    mMat.specularColor = new Color3(0.05, 0.05, 0.06);
-    mMat.specularPower = 16;
-    m.material = mMat;
-    mountains.push(m);
+  }
+  const backCount = 18;
+  for (let i = 0; i < backCount; i++) {
+    const h = 9 + Math.random() * 8;
+    const baseR = 8 + Math.random() * 5;
+    const angle = (i / backCount) * Math.PI * 2 + (Math.random() - 0.5) * 0.25;
+    const dist = 32 + Math.random() * 10;
+    mountains.push(
+      makeMountain(
+        scene,
+        `mountainBack${i}`,
+        {
+          x: Math.cos(angle) * dist,
+          z: Math.sin(angle) * dist,
+          baseRadius: baseR,
+          height: h,
+          groundY,
+        },
+        mountainMat,
+      ),
+    );
   }
 
   // === Arcade button assembly ===
@@ -382,14 +398,16 @@ export function createScene(canvas: HTMLCanvasElement): SceneRefs {
     t += dt;
     const vis = visualIntensity(currentLevel);
 
-    // Drive shader-based grass + rocks
+    // Drive shader-based grass + rocks + mountains
     grass.material.setFloat("time", t);
     grass.material.setVector3("cameraPosition", camera.position);
     rockMat.setVector3("cameraPosition", camera.position);
+    mountainMat.setVector3("cameraPosition", camera.position);
     // Light direction softly rotates with day→night to keep things lively
     const ld = sceneLightDir;
     grass.material.setVector3("lightDir", ld);
     rockMat.setVector3("lightDir", ld);
+    mountainMat.setVector3("lightDir", ld);
 
     // Resolve active camera move (ease-out cubic)
     if (cameraMove) {
@@ -455,9 +473,16 @@ export function createScene(canvas: HTMLCanvasElement): SceneRefs {
     }
   });
 
-  // === Press animation: dome dips down then springs back ===
+  // === Press animation: dome dips down deeply then springs back ===
+  // Frame 0   →   8  (133ms): dome drives down
+  // Frame 8   →  28  (333ms): dome eases back up
+  // Press callback fires at frame 8 (bottom of press) — gameplay effects line
+  // up with the visual impact instead of leading it.
   let pressActive = false;
-  const pressButton = () => {
+  const PRESS_DEPTH = 0.14;
+  const PRESS_DOWN_FRAMES = 8;
+  const PRESS_TOTAL_FRAMES = 28;
+  const pressButton = (onBottom?: () => void) => {
     pressActive = true;
     const anim = new Animation(
       "press",
@@ -468,11 +493,15 @@ export function createScene(canvas: HTMLCanvasElement): SceneRefs {
     );
     anim.setKeys([
       { frame: 0, value: topGroup.position.y },
-      { frame: 3, value: baseTopY - 0.06 },
-      { frame: 14, value: baseTopY },
+      { frame: PRESS_DOWN_FRAMES, value: baseTopY - PRESS_DEPTH },
+      { frame: PRESS_TOTAL_FRAMES, value: baseTopY },
     ]);
     topGroup.animations = [anim];
-    scene.beginAnimation(topGroup, 0, 14, false, 1, () => {
+    if (onBottom) {
+      // Bottom-of-press lines up with the down-phase end at 60 fps
+      window.setTimeout(onBottom, (PRESS_DOWN_FRAMES / 60) * 1000);
+    }
+    scene.beginAnimation(topGroup, 0, PRESS_TOTAL_FRAMES, false, 1, () => {
       pressActive = false;
     });
   };
@@ -555,10 +584,11 @@ export function createScene(canvas: HTMLCanvasElement): SceneRefs {
       lerp(1, 0.4, v),
     );
 
-    // Shader grass + rocks dim with sky
+    // Shader grass + rocks + mountains dim with sky
     const dark = lerp(1.0, 0.42, v);
     grass.material.setFloat("darknessFactor", dark);
     rockMat.setFloat("darknessFactor", dark);
+    mountainMat.setFloat("darknessFactor", dark);
     // Light color shifts cool at night, warm in day (matches keyLight tint)
     const lc = Color3.Lerp(new Color3(1, 0.96, 0.85), new Color3(0.55, 0.62, 0.95), v);
     const ac = Color3.Lerp(new Color3(0.42, 0.46, 0.52), new Color3(0.18, 0.2, 0.32), v);
@@ -566,6 +596,8 @@ export function createScene(canvas: HTMLCanvasElement): SceneRefs {
     grass.material.setColor3("ambientColor", ac);
     rockMat.setColor3("lightColor", lc);
     rockMat.setColor3("ambientColor", ac);
+    mountainMat.setColor3("lightColor", lc);
+    mountainMat.setColor3("ambientColor", ac);
     // Wind picks up slightly with intensity (more dramatic late game)
     grass.material.setFloat("windStrength", 0.22 + v * 0.18);
 
@@ -853,29 +885,165 @@ function makeShaderRock(
   return mesh;
 }
 
+const ROCK_SHADER_UNIFORMS = [
+  "world", "worldView", "worldViewProjection", "view", "viewProjection", "projection",
+  "lightDir", "lightColor", "ambientColor", "cameraPosition",
+  "baseColor", "darkColor", "mossColor",
+  "snowColor", "snowLine", "snowBand",
+  "darknessFactor",
+];
+
 function createRockMaterial(scene: Scene): ShaderMaterial {
   const mat = new ShaderMaterial(
     "rockMat",
     scene,
     { vertex: "rock", fragment: "rock" },
-    {
-      attributes: ["position", "normal"],
-      uniforms: [
-        "world", "worldView", "worldViewProjection", "view", "viewProjection", "projection",
-        "lightDir", "lightColor", "ambientColor", "cameraPosition",
-        "baseColor", "darkColor", "mossColor", "darknessFactor",
-      ],
-    },
+    { attributes: ["position", "normal"], uniforms: ROCK_SHADER_UNIFORMS },
   );
   mat.setColor3("baseColor", new Color3(0.48, 0.48, 0.5));
   mat.setColor3("darkColor", new Color3(0.16, 0.17, 0.2));
   mat.setColor3("mossColor", new Color3(0.32, 0.42, 0.24));
+  mat.setColor3("snowColor", new Color3(0.92, 0.94, 1.0));
+  mat.setFloat("snowLine", 999);  // off
+  mat.setFloat("snowBand", 1.0);
   mat.setVector3("lightDir", new Vector3(-0.4, -1, -0.3).normalize());
   mat.setColor3("lightColor", new Color3(1, 0.96, 0.85));
   mat.setColor3("ambientColor", new Color3(0.42, 0.46, 0.52));
   mat.setVector3("cameraPosition", new Vector3(0, 1, -7));
   mat.setFloat("darknessFactor", 1.0);
   return mat;
+}
+
+function createMountainMaterial(scene: Scene): ShaderMaterial {
+  const mat = new ShaderMaterial(
+    "mountainMat",
+    scene,
+    { vertex: "rock", fragment: "rock" },
+    { attributes: ["position", "normal"], uniforms: ROCK_SHADER_UNIFORMS },
+  );
+  // Slightly cooler/darker than close rocks — atmospheric distance
+  mat.setColor3("baseColor", new Color3(0.36, 0.39, 0.46));
+  mat.setColor3("darkColor", new Color3(0.12, 0.14, 0.20));
+  mat.setColor3("mossColor", new Color3(0.22, 0.30, 0.18));
+  mat.setColor3("snowColor", new Color3(0.95, 0.97, 1.0));
+  // Snow starts a bit below the average peak (5..15) so most mountains get a cap
+  mat.setFloat("snowLine", 4.5);
+  mat.setFloat("snowBand", 2.5);
+  mat.setVector3("lightDir", new Vector3(-0.4, -1, -0.3).normalize());
+  mat.setColor3("lightColor", new Color3(1, 0.96, 0.85));
+  mat.setColor3("ambientColor", new Color3(0.42, 0.46, 0.52));
+  mat.setVector3("cameraPosition", new Vector3(0, 1, -7));
+  mat.setFloat("darknessFactor", 1.0);
+  return mat;
+}
+
+// ===========================================================================
+// Mountains: ring-stacked jagged cone with welded vertices + flat shading.
+// ===========================================================================
+
+type MountainSpec = {
+  x: number;
+  z: number;
+  baseRadius: number;
+  height: number;
+  groundY: number;
+};
+
+function makeMountain(scene: Scene, name: string, spec: MountainSpec, mat: ShaderMaterial): Mesh {
+  // K sides per ring — keep low for a chunky/low-poly silhouette.
+  const K = 9 + Math.floor(Math.random() * 3);
+  const RINGS = 5; // ring count below the summit ring
+  const positions: number[] = [];
+  const uvs: number[] = [];
+  const indices: number[] = [];
+
+  // Position-keyed deterministic jitter so all geometry stays welded after
+  // we duplicate vertices via convertToFlatShadedMesh.
+  const seedI = Math.floor((spec.x * 91.7 + spec.z * 53.1) * 1000) | 0;
+  const jr = (a: number, b: number) => {
+    let h = (a * 374761393) ^ (b * 668265263) ^ seedI;
+    h = (h ^ (h >>> 13)) * 1274126177;
+    return ((h ^ (h >>> 16)) >>> 0) / 4294967295;
+  };
+
+  // Cone profile: wider exponent (<1) keeps the silhouette stocky instead of
+  // tapering to a sharp point. Each ring carries a noticeable radius all the
+  // way up; the summit is a small jagged ring + apex, not a single spike.
+  for (let r = 0; r < RINGS; r++) {
+    const t = r / RINGS;                       // 0 at base, → 1 at top ring
+    const baseY = Math.pow(t, 0.85) * spec.height;
+    const baseRad = Math.pow(1 - t, 0.6) * spec.baseRadius;
+    for (let k = 0; k < K; k++) {
+      const angle = (k / K) * Math.PI * 2;
+      const rJ = (jr(r * 1009 + k, 17) - 0.5) * 0.4;
+      const yJ = (jr(r * 1009 + k, 31) - 0.5) * 0.12 * spec.height;
+      const radius = baseRad * (1 + rJ);
+      positions.push(Math.cos(angle) * radius, baseY + yJ, Math.sin(angle) * radius);
+      uvs.push(k / K, t);
+    }
+  }
+  // Summit ring — small jagged ring just below the apex so the peak reads as
+  // a chunky ridge rather than a sharp cone tip.
+  const summitRad = 0.16 * spec.baseRadius;
+  const summitY = spec.height * 0.92;
+  for (let k = 0; k < K; k++) {
+    const angle = (k / K) * Math.PI * 2;
+    const rJ = (jr(700 + k, 23) - 0.5) * 0.7;
+    const yJ = (jr(700 + k, 41) - 0.5) * 0.18 * spec.height;
+    positions.push(Math.cos(angle) * summitRad * (1 + rJ), summitY + yJ, Math.sin(angle) * summitRad * (1 + rJ));
+    uvs.push(k / K, 0.95);
+  }
+  // Apex — well off-center so each peak leans differently
+  const apexX = (jr(99, 1) - 0.5) * 0.3 * spec.baseRadius;
+  const apexZ = (jr(99, 2) - 0.5) * 0.3 * spec.baseRadius;
+  const summitStart = RINGS * K;
+  const apexIdx = summitStart + K;
+  positions.push(apexX, spec.height, apexZ);
+  uvs.push(0.5, 1);
+
+  // Quads between adjacent rings
+  for (let r = 0; r < RINGS - 1; r++) {
+    for (let k = 0; k < K; k++) {
+      const k1 = (k + 1) % K;
+      const a = r * K + k;
+      const b = r * K + k1;
+      const c = (r + 1) * K + k;
+      const d = (r + 1) * K + k1;
+      indices.push(a, c, b, b, c, d);
+    }
+  }
+  // Connect last main ring to the summit ring
+  const lastMain = (RINGS - 1) * K;
+  for (let k = 0; k < K; k++) {
+    const k1 = (k + 1) % K;
+    const a = lastMain + k;
+    const b = lastMain + k1;
+    const c = summitStart + k;
+    const d = summitStart + k1;
+    indices.push(a, c, b, b, c, d);
+  }
+  // Apex fan from the summit ring
+  for (let k = 0; k < K; k++) {
+    const k1 = (k + 1) % K;
+    indices.push(summitStart + k, apexIdx, summitStart + k1);
+  }
+
+  const mesh = new Mesh(name, scene);
+  const vd = new VertexData();
+  vd.positions = positions;
+  vd.indices = indices;
+  vd.uvs = uvs;
+  const normals: number[] = [];
+  VertexData.ComputeNormals(positions, indices, normals);
+  vd.normals = normals;
+  vd.applyToMesh(mesh);
+  // Hard facets — each triangle gets its own face normal
+  mesh.convertToFlatShadedMesh();
+
+  mesh.position.set(spec.x, spec.groundY - 0.2, spec.z);
+  mesh.rotation.y = Math.random() * Math.PI * 2;
+  mesh.material = mat;
+  return mesh;
 }
 
 // ===========================================================================
@@ -1122,6 +1290,9 @@ function registerLandscapeShaders(): void {
     uniform vec3 baseColor;
     uniform vec3 darkColor;
     uniform vec3 mossColor;
+    uniform vec3 snowColor;
+    uniform float snowLine;
+    uniform float snowBand;
     uniform float darknessFactor;
 
     float hash13(vec3 p) {
@@ -1180,6 +1351,13 @@ function registerLandscapeShaders(): void {
 
       // Slight cool tint in shadowed crevices (slate-blue undertone)
       base = mix(base, base * vec3(0.85, 0.9, 1.05), (1.0 - up) * 0.35);
+
+      // Snow on high, upward-facing surfaces. snowLine=999 disables it.
+      float snowAlt = smoothstep(snowLine, snowLine + snowBand, vWorldPos.y);
+      float snowSlope = smoothstep(0.25, 0.7, up);
+      float snowEdge = smoothstep(0.45, 0.75, fbm(vLocalPos * 2.1 + 4.0));
+      float snowMask = snowAlt * snowSlope * (0.55 + 0.45 * snowEdge);
+      base = mix(base, snowColor, snowMask);
 
       // Lambert + ambient
       vec3 ldir = normalize(-lightDir);

@@ -60,6 +60,33 @@ export class GameState {
   streakMeter = 0;
   streakTier = 0; // 0..5
 
+  // Recovery: after a click the player can't click again until the recovery
+  // window has elapsed. Duration shrinks gracefully with level.
+  private recoveryStartAt = 0;
+  private recoveryEndAt = 0;
+
+  recoveryDuration(): number {
+    // 1.5s at level 1, asymptoting toward ~0.45s deep into the game.
+    return 0.45 + 1.05 / (1 + (this.level - 1) * 0.07);
+  }
+
+  canClick(now: number = performance.now()): boolean {
+    return now >= this.recoveryEndAt;
+  }
+
+  startRecovery(now: number = performance.now()): void {
+    this.recoveryStartAt = now;
+    this.recoveryEndAt = now + this.recoveryDuration() * 1000;
+  }
+
+  // 0 at click-time, 1 when recovery is complete (ready to click again).
+  recoveryProgress(now: number = performance.now()): number {
+    const dur = this.recoveryEndAt - this.recoveryStartAt;
+    if (dur <= 0) return 1;
+    if (now >= this.recoveryEndAt) return 1;
+    return Math.max(0, (now - this.recoveryStartAt) / dur);
+  }
+
   // Probabilities sum to ≤ 1; remainder is "miss". Better with level.
   // Indexed by category in order: ok, good, great, perfect.
   hitChance(): { ok: number; good: number; great: number; perfect: number; miss: number } {

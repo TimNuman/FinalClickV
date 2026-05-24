@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+    <title>FINAL CLICK</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <canvas id="renderCanvas" touch-action="none"></canvas>
+
+    <!-- HUD overlay -->
+    <div id="hud">
+      <!-- Top bar: level + XP -->
+      <div class="hud-top">
+        <div class="level-badge">
+          <div class="level-label">LVL</div>
+          <div class="level-number" id="levelNumber">1</div>
+        </div>
+        <div class="xp-wrap">
+          <div class="xp-row">
+            <span id="rankTitle">Apprentice Clicker</span>
+            <span id="xpText">0 / 100 XP</span>
+          </div>
+          <div class="xp-bar">
+            <div class="xp-fill" id="xpFill"></div>
+            <div class="xp-shine"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Streak meter (right) -->
+      <div class="streak-wrap">
+        <div class="streak-label">STREAK</div>
+        <div class="streak-number" id="streakNumber">0</div>
+        <div class="streak-bar">
+          <div class="streak-fill" id="streakFill"></div>
+        </div>
+        <div class="streak-tier" id="streakTier">—</div>
+      </div>
+
+      <!-- Stats (left) -->
+      <div class="stats-wrap">
+        <div class="stat-row"><span>Score</span><span id="scoreText">0</span></div>
+        <div class="stat-row"><span>Best Streak</span><span id="bestStreakText">0</span></div>
+        <div class="stat-row"><span>Clicks</span><span id="clicksText">0</span></div>
+        <div class="stat-row"><span>Crit Chance</span><span id="critText">5%</span></div>
+      </div>
+
+      <!-- Center floating hit text -->
+      <div id="hitTextLayer"></div>
+
+      <!-- Vignette / flash overlay -->
+      <div id="flashOverlay"></div>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

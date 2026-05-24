@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.DS_Store
+.vite/
+*.log
+
+# Local Claude Code settings
+.claude/settings.local.json

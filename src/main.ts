@@ -47,56 +47,73 @@ const vfx = new VFX({
   getIntensity: () => refs.intensity(),
 });
 
-// === Click handler ===
-// Recovery + press flow:
-//   - click input    → start recovery, kick the down/up press animation
-//   - bottom of press → resolve hit, fire all VFX + HUD updates
-//   - further clicks ignored until recovery completes
-function tryClick(screenX: number, screenY: number) {
+// === Hold-to-press, release-to-commit flow ===
+//   - press input on the red cap → if recovery is ready, hold the dome down
+//   - release input → commit the click: state.click(), VFX, HUD, recovery starts
+//   - presses during recovery are ignored
+let holding = false;
+let pressX = 0;
+let pressY = 0;
+
+function tryPress(screenX: number, screenY: number) {
+  if (holding) return;
   if (!state.canClick()) return;
+  holding = true;
+  pressX = screenX;
+  pressY = screenY;
+  refs.setButtonHeld(true);
+}
+
+function commitRelease() {
+  if (!holding) return;
+  holding = false;
+  refs.setButtonHeld(false);
+
   state.startRecovery();
   hud.setRecovery(0);
 
-  refs.pressButton(() => {
-    // Effects line up with the visual impact at the bottom of the press
-    const result = state.click();
-    const intensity = refs.intensity();
+  const result = state.click();
+  const intensity = refs.intensity();
 
-    vfx.triggerHit(result);
-    vfx.setStreakTier(state.streakTier);
+  vfx.triggerHit(result);
+  vfx.setStreakTier(state.streakTier);
 
-    hud.showHit(result, screenX, screenY, intensity);
-    hud.pulseStreak();
-    hud.refresh(state);
+  hud.showHit(result, pressX, pressY, intensity);
+  hud.pulseStreak();
+  hud.refresh(state);
 
-    // Body-shake fallback for misses only at higher intensity
-    if (result.category === "miss" && intensity > 0.3) {
-      hud.shake();
+  if (result.category === "miss" && intensity > 0.3) {
+    hud.shake();
+  }
+
+  if (result.leveledUp) {
+    refs.applyVisualLevel(state.level);
+    refs.cycleCameraAngle(1.4);
+    const newIntensity = refs.intensity();
+    hud.showLevelUp(result.newLevel, newIntensity);
+    cameraShake(0.08 + newIntensity * 0.5, 0.4 + newIntensity * 0.5);
+    if (newIntensity > 0.25) {
+      vfx.triggerHit({ ...result, category: "legendary" });
     }
-
-    if (result.leveledUp) {
-      refs.applyVisualLevel(state.level);
-      refs.cycleCameraAngle(1.4);
-      const newIntensity = refs.intensity();
-      hud.showLevelUp(result.newLevel, newIntensity);
-      cameraShake(0.08 + newIntensity * 0.5, 0.4 + newIntensity * 0.5);
-      if (newIntensity > 0.25) {
-        // Celebratory burst on level-up
-        vfx.triggerHit({ ...result, category: "legendary" });
-      }
-    }
-  });
+  }
 }
 
-refs.onClick.add(() => {
-  tryClick(refs.scene.pointerX, refs.scene.pointerY);
+refs.onPress.add(() => {
+  tryPress(refs.scene.pointerX, refs.scene.pointerY);
+});
+refs.onRelease.add(() => {
+  commitRelease();
 });
 
 window.addEventListener("keydown", (e) => {
-  if (e.code === "Space") {
-    e.preventDefault();
-    tryClick(window.innerWidth / 2, window.innerHeight / 2);
-  }
+  if (e.code !== "Space" || e.repeat) return;
+  e.preventDefault();
+  tryPress(window.innerWidth / 2, window.innerHeight / 2);
+});
+window.addEventListener("keyup", (e) => {
+  if (e.code !== "Space") return;
+  e.preventDefault();
+  commitRelease();
 });
 
 // Drive the HUD recovery bar each frame

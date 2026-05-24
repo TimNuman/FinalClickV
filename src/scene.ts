@@ -1,5 +1,4 @@
 import {
-  Animation,
   ArcRotateCamera,
   Color3,
   Color4,
@@ -43,8 +42,9 @@ export interface SceneRefs {
   pipeline: DefaultRenderingPipeline;
   fillLight: PointLight;
   hemiLight: HemisphericLight;
-  onClick: Observable<void>;
-  pressButton: (onBottom?: () => void) => void;
+  onPress: Observable<void>;
+  onRelease: Observable<void>;
+  setButtonHeld: (held: boolean) => void;
   getButtonWorldPos: () => Vector3;
   applyVisualLevel: (level: number) => void;
   intensity: () => number;
@@ -425,9 +425,18 @@ export function createScene(canvas: HTMLCanvasElement): SceneRefs {
     camera.beta = cameraBaseBeta + Math.sin(t * 0.22) * 0.03 * vis;
     camera.radius = cameraBaseRadius;
 
-    // Top group subtle bob (only at higher level)
-    if (vis > 0 && !pressActive) {
-      topGroup.position.y = baseTopY + Math.sin(t * 1.2) * 0.025 * vis;
+    // Dome height: glide toward the target (held=down, released=base + idle bob)
+    const bob = vis > 0 ? Math.sin(t * 1.2) * 0.025 * vis : 0;
+    const targetY = buttonHeld ? (baseTopY - PRESS_DEPTH) : (baseTopY + bob);
+    const cur = topGroup.position.y;
+    const dist = targetY - cur;
+    if (Math.abs(dist) > 0.0005) {
+      // Fast dive on press, springier rise on release
+      const rate = (targetY < cur ? PRESS_DEPTH / PRESS_DOWN_SECONDS : PRESS_DEPTH / PRESS_UP_SECONDS);
+      const step = Math.sign(dist) * Math.min(rate * dt, Math.abs(dist));
+      topGroup.position.y = cur + step;
+    } else {
+      topGroup.position.y = targetY;
     }
 
     // Halo pulsing
@@ -454,56 +463,37 @@ export function createScene(canvas: HTMLCanvasElement): SceneRefs {
     }
   });
 
-  // === Click detection ===
-  const onClick = new Observable<void>();
-  const clickableMeshes = new Set<Mesh>([buttonTop, buttonBase, buttonRing, buttonHalo, buttonCore]);
+  // === Press / release detection (only the red cap is clickable) ===
+  // A press starts when the pointer goes down on buttonTop. A release fires
+  // when the pointer is released anywhere — even if the pointer drifted off
+  // the cap during the hold.
+  const onPress = new Observable<void>();
+  const onRelease = new Observable<void>();
+  let pointerPressing = false;
   scene.onPointerObservable.add((info) => {
     if (info.type === PointerEventTypes.POINTERDOWN) {
       const pick = info.pickInfo;
-      if (pick?.hit && pick.pickedMesh && clickableMeshes.has(pick.pickedMesh as Mesh)) {
-        onClick.notifyObservers();
-        return;
+      if (pick?.hit && pick.pickedMesh === buttonTop) {
+        pointerPressing = true;
+        onPress.notifyObservers();
       }
-      // Forgiving central hit area
-      const px = scene.pointerX / engine.getRenderWidth();
-      const py = scene.pointerY / engine.getRenderHeight();
-      if (px > 0.3 && px < 0.7 && py > 0.3 && py < 0.85) {
-        onClick.notifyObservers();
+    } else if (info.type === PointerEventTypes.POINTERUP) {
+      if (pointerPressing) {
+        pointerPressing = false;
+        onRelease.notifyObservers();
       }
     }
   });
 
-  // === Press animation: dome dips down deeply then springs back ===
-  // Frame 0   →   8  (133ms): dome drives down
-  // Frame 8   →  28  (333ms): dome eases back up
-  // Press callback fires at frame 8 (bottom of press) — gameplay effects line
-  // up with the visual impact instead of leading it.
-  let pressActive = false;
+  // === Dome held-state animation ===
+  // Hold = dome dives down and stays there. Release = dome eases back up.
+  // PRESS_DOWN_SECONDS is fast for snap, PRESS_UP_SECONDS slower for a soft return.
+  let buttonHeld = false;
   const PRESS_DEPTH = 0.14;
-  const PRESS_DOWN_FRAMES = 8;
-  const PRESS_TOTAL_FRAMES = 28;
-  const pressButton = (onBottom?: () => void) => {
-    pressActive = true;
-    const anim = new Animation(
-      "press",
-      "position.y",
-      60,
-      Animation.ANIMATIONTYPE_FLOAT,
-      Animation.ANIMATIONLOOPMODE_CONSTANT,
-    );
-    anim.setKeys([
-      { frame: 0, value: topGroup.position.y },
-      { frame: PRESS_DOWN_FRAMES, value: baseTopY - PRESS_DEPTH },
-      { frame: PRESS_TOTAL_FRAMES, value: baseTopY },
-    ]);
-    topGroup.animations = [anim];
-    if (onBottom) {
-      // Bottom-of-press lines up with the down-phase end at 60 fps
-      window.setTimeout(onBottom, (PRESS_DOWN_FRAMES / 60) * 1000);
-    }
-    scene.beginAnimation(topGroup, 0, PRESS_TOTAL_FRAMES, false, 1, () => {
-      pressActive = false;
-    });
+  const PRESS_DOWN_SECONDS = 0.10;
+  const PRESS_UP_SECONDS = 0.30;
+  const setButtonHeld = (held: boolean) => {
+    buttonHeld = held;
   };
 
   // === Camera move API ===
@@ -646,8 +636,9 @@ export function createScene(canvas: HTMLCanvasElement): SceneRefs {
     pipeline,
     fillLight,
     hemiLight: hemi,
-    onClick,
-    pressButton,
+    onPress,
+    onRelease,
+    setButtonHeld,
     getButtonWorldPos,
     applyVisualLevel,
     intensity: () => visualIntensity(currentLevel),

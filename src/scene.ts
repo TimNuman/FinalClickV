@@ -673,6 +673,9 @@ export function createScene(canvas: HTMLCanvasElement): SceneRefs {
     mountainMat.setColor3("ambientColor", ac);
     // Wind picks up slightly with intensity (more dramatic late game)
     grass.material.setFloat("windStrength", 0.22 + v * 0.18);
+    // Radial wind from the button — at high levels the dome appears to push
+    // a steady outward gust through the grass field, with a traveling pulse.
+    grass.material.setFloat("buttonWindStrength", v * 1.2);
 
     // Button red dome gets a subtle inner glow at higher levels
     topMat.emissiveColor = new Color3(0.6 * v * 0.5, 0.03 * v, 0.03 * v);
@@ -1150,6 +1153,7 @@ function createGrassField(
       uniforms: [
         "view", "viewProjection", "projection",
         "time", "windDir", "windStrength",
+        "buttonPos", "buttonWindStrength", "buttonWindRadius",
         "baseColor", "tipColor", "lightDir", "lightColor", "ambientColor",
         "cameraPosition", "darknessFactor",
       ],
@@ -1160,6 +1164,10 @@ function createGrassField(
   mat.setColor3("tipColor", new Color3(0.62, 0.78, 0.34));
   mat.setVector3("windDir", new Vector3(0.85, 0, 0.52));
   mat.setFloat("windStrength", 0.22);
+  // Radial wind defaults: button at world origin (xz), no extra blow yet, 10u falloff.
+  mat.setVector3("buttonPos", new Vector3(0, 0, 0));
+  mat.setFloat("buttonWindStrength", 0);
+  mat.setFloat("buttonWindRadius", 10);
   mat.setVector3("lightDir", new Vector3(-0.4, -1, -0.3).normalize());
   mat.setColor3("lightColor", new Color3(1, 0.96, 0.85));
   mat.setColor3("ambientColor", new Color3(0.42, 0.46, 0.52));
@@ -1272,6 +1280,9 @@ function registerLandscapeShaders(): void {
     uniform float time;
     uniform vec3 windDir;
     uniform float windStrength;
+    uniform vec3 buttonPos;          // xz centre of the button in world space
+    uniform float buttonWindStrength; // 0 = no radial gust, 1 = strong outward blow
+    uniform float buttonWindRadius;   // distance at which the radial wind dies out
 
     varying float vHeight;
     varying vec3 vWorldPos;
@@ -1295,8 +1306,22 @@ function registerLandscapeShaders(): void {
 
       wp.x += windDir.x * sway;
       wp.z += windDir.z * sway;
+
+      // Radial wind emanating from the button. Direction is from button to
+      // blade (xz only), strength falls off with distance, and a traveling
+      // sine pulse adds an outward shockwave that propagates over time.
+      vec2 toBlade = wp.xz - buttonPos.xz;
+      float dist = max(length(toBlade), 0.01);
+      vec2 radialDir = toBlade / dist;
+      float falloff = clamp(1.0 - dist / buttonWindRadius, 0.0, 1.0);
+      falloff *= falloff;
+      float pulse = 0.55 + 0.45 * sin(dist * 1.6 - time * 4.2);
+      float radialSway = falloff * pulse * buttonWindStrength * bend;
+      wp.x += radialDir.x * radialSway;
+      wp.z += radialDir.y * radialSway;
+
       // Sink slightly when bent so the tip arcs instead of stretching
-      wp.y -= bend * abs(sway) * 0.25;
+      wp.y -= bend * (abs(sway) + abs(radialSway)) * 0.25;
 
       vHeight = h;
       vWorldPos = wp.xyz;

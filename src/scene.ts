@@ -558,9 +558,16 @@ export function createScene(canvas: HTMLCanvasElement): SceneRefs {
   const RADIUS_MIN = 4.0;
   const RADIUS_MAX = 13.0;
   const BETA_MIN = 0.2;
-  const BETA_MAX = Math.PI - 0.2;
+  // Lowest world Y the camera is allowed to reach. Camera sits at
+  //   y = target.y + cos(beta) * radius   (target.y = 0)
+  // so the max beta depends on the current radius. Keeping the camera at
+  // least 0.4 above the ground (groundY = -0.55) avoids dipping under the
+  // floor and clipping through grass roots.
+  const CAMERA_MIN_Y = groundY + 0.4;
 
   const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+  const maxBetaForRadius = (r: number) =>
+    Math.acos(clamp(CAMERA_MIN_Y / r, -0.999, 0.999));
 
   scene.onPointerObservable.add((info) => {
     const pe = info.event as PointerEvent;
@@ -605,12 +612,19 @@ export function createScene(canvas: HTMLCanvasElement): SceneRefs {
         const dx = pe.clientX - dragStart.x;
         const dy = pe.clientY - dragStart.y;
         cameraBaseAlpha = dragStart.alpha - dx * ROT_SENS;
-        cameraBaseBeta = clamp(dragStart.beta - dy * ROT_SENS, BETA_MIN, BETA_MAX);
+        cameraBaseBeta = clamp(
+          dragStart.beta - dy * ROT_SENS,
+          BETA_MIN,
+          maxBetaForRadius(cameraBaseRadius),
+        );
       } else if (dragMode === "pinch" && activePointers.size >= 2) {
         const pts = Array.from(activePointers.values());
         const d = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y) || 1;
         // Fingers moving apart → zoom in (smaller radius); closing → zoom out
         cameraBaseRadius = clamp(dragStart.radius * (dragStart.pinchDist / d), RADIUS_MIN, RADIUS_MAX);
+        // A smaller radius pulls the ground floor closer in beta-space — clamp
+        // again so the existing tilt doesn't end up under the ground.
+        cameraBaseBeta = clamp(cameraBaseBeta, BETA_MIN, maxBetaForRadius(cameraBaseRadius));
       }
     } else if (info.type === PointerEventTypes.POINTERUP) {
       activePointers.delete(pe.pointerId);
@@ -634,6 +648,7 @@ export function createScene(canvas: HTMLCanvasElement): SceneRefs {
     e.preventDefault();
     const delta = e.deltaY * 0.006;
     cameraBaseRadius = clamp(cameraBaseRadius + delta, RADIUS_MIN, RADIUS_MAX);
+    cameraBaseBeta = clamp(cameraBaseBeta, BETA_MIN, maxBetaForRadius(cameraBaseRadius));
     cameraMove = null;
   }, { passive: false });
 

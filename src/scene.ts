@@ -263,32 +263,35 @@ export function createScene(canvas: HTMLCanvasElement): SceneRefs {
   sun.isPickable = false;
 
   const lensFlareSystem = new LensFlareSystem("sunLensFlare", sun, scene);
+  // Flare textures: muted alpha gives a softer, less in-the-way flare.
   const lfMain = radialGradientPngUrl(128, [
-    { stop: 0,    color: "rgba(255,255,255,1)"   },
-    { stop: 0.25, color: "rgba(255,210,140,0.85)" },
+    { stop: 0,    color: "rgba(255,255,255,0.55)" },
+    { stop: 0.3,  color: "rgba(255,210,140,0.32)" },
     { stop: 1,    color: "rgba(255,160,80,0)"    },
   ]);
   const lfHalo = radialGradientPngUrl(128, [
     { stop: 0,    color: "rgba(255,200,140,0)"   },
     { stop: 0.62, color: "rgba(255,200,140,0)"   },
-    { stop: 0.78, color: "rgba(255,210,170,0.55)" },
-    { stop: 0.9,  color: "rgba(255,180,130,0.3)" },
+    { stop: 0.78, color: "rgba(255,210,170,0.22)" },
+    { stop: 0.9,  color: "rgba(255,180,130,0.12)" },
     { stop: 1,    color: "rgba(255,180,130,0)"  },
   ]);
   const lfDot = radialGradientPngUrl(64, [
-    { stop: 0,   color: "rgba(255,255,255,1)" },
-    { stop: 0.6, color: "rgba(220,220,220,0.4)" },
+    { stop: 0,   color: "rgba(255,255,255,0.5)" },
+    { stop: 0.6, color: "rgba(220,220,220,0.18)" },
     { stop: 1,   color: "rgba(120,120,120,0)" },
   ]);
   // Flares stretched along the line from sun → screen center. position is a
   // 0..1 distance fraction; 0 = at the sun, 1 = at the opposite side.
-  new LensFlare(0.28, 0.00, new Color3(1.0, 0.93, 0.78), lfMain, lensFlareSystem);
-  new LensFlare(0.45, 0.04, new Color3(1.0, 0.78, 0.42), lfHalo, lensFlareSystem);
-  new LensFlare(0.10, 0.42, new Color3(0.95, 0.7, 0.4),  lfDot,  lensFlareSystem);
-  new LensFlare(0.06, 0.58, new Color3(0.9, 0.3, 0.25),  lfDot,  lensFlareSystem);
-  new LensFlare(0.12, 0.76, new Color3(0.55, 0.45, 1.0), lfHalo, lensFlareSystem);
-  new LensFlare(0.05, 0.88, new Color3(0.5, 0.85, 0.6),  lfDot,  lensFlareSystem);
-  new LensFlare(0.18, 1.05, new Color3(0.85, 0.65, 1.0), lfHalo, lensFlareSystem);
+  // Colours are damped (multiplied with the already-low-alpha textures) so
+  // the flare reads as a subtle atmospheric tint rather than a wash.
+  new LensFlare(0.28, 0.00, new Color3(0.55, 0.50, 0.42), lfMain, lensFlareSystem);
+  new LensFlare(0.45, 0.04, new Color3(0.55, 0.42, 0.22), lfHalo, lensFlareSystem);
+  new LensFlare(0.10, 0.42, new Color3(0.55, 0.40, 0.22), lfDot,  lensFlareSystem);
+  new LensFlare(0.06, 0.58, new Color3(0.50, 0.18, 0.14), lfDot,  lensFlareSystem);
+  new LensFlare(0.12, 0.76, new Color3(0.30, 0.25, 0.55), lfHalo, lensFlareSystem);
+  new LensFlare(0.05, 0.88, new Color3(0.28, 0.48, 0.34), lfDot,  lensFlareSystem);
+  new LensFlare(0.18, 1.05, new Color3(0.45, 0.35, 0.55), lfHalo, lensFlareSystem);
   // Default occlusion-radius is fine; mountains' world-space bounding boxes
   // will hide the flare cleanly when the sun goes behind a peak.
 

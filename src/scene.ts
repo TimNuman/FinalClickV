@@ -8,6 +8,8 @@ import {
   Engine,
   GlowLayer,
   HemisphericLight,
+  LensFlare,
+  LensFlareSystem,
   Matrix,
   Mesh,
   MeshBuilder,
@@ -240,6 +242,55 @@ export function createScene(canvas: HTMLCanvasElement): SceneRefs {
       ),
     );
   }
+
+  // === Sun + lens flare ===
+  // Bright disc placed beyond the back mountain ring. The mountains can
+  // occlude it as the camera rotates, which the lens flare system handles
+  // automatically via its built-in ray-pick test. Sun + flare fade out as
+  // the scene transitions toward night.
+  const sunBaseEmissive = new Color3(1.0, 0.78, 0.42);
+  const sun = MeshBuilder.CreateSphere("sun", { diameter: 4.5, segments: 24 }, scene);
+  // Behind the back-mountain ring (back row reaches z≈42, height ~13). Y kept
+  // low enough to actually sit in the camera frame at the default preset.
+  sun.position.set(5, 14, 48);
+  const sunMat = new StandardMaterial("sunMat", scene);
+  sunMat.emissiveColor = sunBaseEmissive;
+  sunMat.diffuseColor = new Color3(0, 0, 0);
+  sunMat.specularColor = new Color3(0, 0, 0);
+  sunMat.disableLighting = true;
+  sun.material = sunMat;
+  // Skip our shader pipeline's bloom selection — the sun's own emissive is enough
+  sun.isPickable = false;
+
+  const lensFlareSystem = new LensFlareSystem("sunLensFlare", sun, scene);
+  const lfMain = radialGradientPngUrl(128, [
+    { stop: 0,    color: "rgba(255,255,255,1)"   },
+    { stop: 0.25, color: "rgba(255,210,140,0.85)" },
+    { stop: 1,    color: "rgba(255,160,80,0)"    },
+  ]);
+  const lfHalo = radialGradientPngUrl(128, [
+    { stop: 0,    color: "rgba(255,200,140,0)"   },
+    { stop: 0.62, color: "rgba(255,200,140,0)"   },
+    { stop: 0.78, color: "rgba(255,210,170,0.55)" },
+    { stop: 0.9,  color: "rgba(255,180,130,0.3)" },
+    { stop: 1,    color: "rgba(255,180,130,0)"  },
+  ]);
+  const lfDot = radialGradientPngUrl(64, [
+    { stop: 0,   color: "rgba(255,255,255,1)" },
+    { stop: 0.6, color: "rgba(220,220,220,0.4)" },
+    { stop: 1,   color: "rgba(120,120,120,0)" },
+  ]);
+  // Flares stretched along the line from sun → screen center. position is a
+  // 0..1 distance fraction; 0 = at the sun, 1 = at the opposite side.
+  new LensFlare(0.28, 0.00, new Color3(1.0, 0.93, 0.78), lfMain, lensFlareSystem);
+  new LensFlare(0.45, 0.04, new Color3(1.0, 0.78, 0.42), lfHalo, lensFlareSystem);
+  new LensFlare(0.10, 0.42, new Color3(0.95, 0.7, 0.4),  lfDot,  lensFlareSystem);
+  new LensFlare(0.06, 0.58, new Color3(0.9, 0.3, 0.25),  lfDot,  lensFlareSystem);
+  new LensFlare(0.12, 0.76, new Color3(0.55, 0.45, 1.0), lfHalo, lensFlareSystem);
+  new LensFlare(0.05, 0.88, new Color3(0.5, 0.85, 0.6),  lfDot,  lensFlareSystem);
+  new LensFlare(0.18, 1.05, new Color3(0.85, 0.65, 1.0), lfHalo, lensFlareSystem);
+  // Default occlusion-radius is fine; mountains' world-space bounding boxes
+  // will hide the flare cleanly when the sun goes behind a peak.
 
   // === Arcade button assembly ===
   const buttonAnchor = new TransformNode("buttonAnchor", scene);
@@ -622,6 +673,17 @@ export function createScene(canvas: HTMLCanvasElement): SceneRefs {
     // Fill light shifts to warm/orange and brighter
     fillLight.diffuse = Color3.Lerp(new Color3(1, 1, 1), new Color3(1, 0.6, 0.25), v);
     fillLight.intensity = lerp(0.5, 1.4, v);
+
+    // Sun + lens flare fade out into twilight/night. Below ~10% daytime the
+    // flare system is disabled outright (skips its per-frame raypicks).
+    const sunDay = 1 - v;
+    sunMat.emissiveColor = new Color3(
+      sunBaseEmissive.r * sunDay,
+      sunBaseEmissive.g * sunDay,
+      sunBaseEmissive.b * sunDay,
+    );
+    sun.setEnabled(sunDay > 0.05);
+    lensFlareSystem.isEnabled = sunDay > 0.1;
   };
 
   // Initial state at level 1
@@ -1406,6 +1468,19 @@ function valueNoise3(x: number, y: number, z: number): number {
   const y0 = x00 * (1 - v) + x10 * v;
   const y1 = x01 * (1 - v) + x11 * v;
   return y0 * (1 - w) + y1 * w;
+}
+
+// Standalone helper: produce a data-URL PNG with a radial gradient.
+// Babylon's LensFlare wants a string URL, not a Texture object.
+function radialGradientPngUrl(size: number, stops: { stop: number; color: string }[]): string {
+  const c = document.createElement("canvas");
+  c.width = c.height = size;
+  const ctx = c.getContext("2d")!;
+  const g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  for (const s of stops) g.addColorStop(s.stop, s.color);
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, size, size);
+  return c.toDataURL("image/png");
 }
 
 export function createRadialGradientTexture(

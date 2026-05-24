@@ -121,23 +121,25 @@ export function createScene(canvas: HTMLCanvasElement): SceneRefs {
   // Button cap faces -Z (toward camera); base tilts into +Z. So we cluster larger
   // rocks behind (+Z) and on the sides, with low/small rocks in front (-Z) so the
   // cap stays fully visible.
+  // Button footprint (after the -π/4 tilt) reaches roughly z ≈ +1.3 at the
+  // base back rim and ±0.85 on the sides. Keep rocks clear of that volume.
   const closeRockSpecs: { x: number; z: number; size: number; sx: number; sy: number; sz: number }[] = [
     // Tall mountain shards BEHIND the button — jut up to frame the cap
-    { x: -1.30, z:  1.55, size: 0.60, sx: 1.2, sy: 1.9, sz: 1.2 },
-    { x:  0.05, z:  1.85, size: 0.72, sx: 1.4, sy: 2.1, sz: 1.3 },
-    { x:  1.35, z:  1.35, size: 0.58, sx: 1.2, sy: 1.8, sz: 1.3 },
-    // Mid rocks just behind base — slightly shorter, fill gaps
-    { x: -0.55, z:  1.10, size: 0.42, sx: 1.0, sy: 1.3, sz: 1.0 },
-    { x:  0.75, z:  1.05, size: 0.45, sx: 1.0, sy: 1.4, sz: 1.0 },
-    // Angular side shards flanking the base
-    { x: -1.70, z:  0.30, size: 0.55, sx: 1.1, sy: 1.6, sz: 1.2 },
-    { x:  1.70, z:  0.25, size: 0.55, sx: 1.1, sy: 1.6, sz: 1.2 },
-    { x: -1.40, z: -0.35, size: 0.38, sx: 1.0, sy: 1.0, sz: 1.0 },
-    { x:  1.40, z: -0.30, size: 0.38, sx: 1.0, sy: 1.0, sz: 1.0 },
+    { x: -1.65, z:  2.30, size: 0.60, sx: 1.1, sy: 1.9, sz: 1.2 },
+    { x:  0.10, z:  2.65, size: 0.72, sx: 1.3, sy: 2.1, sz: 1.3 },
+    { x:  1.75, z:  2.15, size: 0.58, sx: 1.1, sy: 1.8, sz: 1.3 },
+    // Mid rocks tucked into the corners behind the base
+    { x: -1.10, z:  1.85, size: 0.42, sx: 1.0, sy: 1.3, sz: 1.0 },
+    { x:  1.20, z:  1.75, size: 0.45, sx: 1.0, sy: 1.4, sz: 1.0 },
+    // Angular side shards flanking the base (well clear of x≈±0.85 footprint)
+    { x: -2.15, z:  0.55, size: 0.55, sx: 1.1, sy: 1.5, sz: 1.2 },
+    { x:  2.15, z:  0.45, size: 0.55, sx: 1.1, sy: 1.5, sz: 1.2 },
+    { x: -1.85, z: -0.30, size: 0.40, sx: 1.0, sy: 1.0, sz: 1.0 },
+    { x:  1.85, z: -0.25, size: 0.40, sx: 1.0, sy: 1.0, sz: 1.0 },
     // Low rocks in FRONT — kept short so the cap stays fully visible
-    { x: -0.95, z: -0.95, size: 0.30, sx: 1.0, sy: 0.6,  sz: 0.95 },
-    { x:  0.05, z: -1.15, size: 0.32, sx: 1.1, sy: 0.55, sz: 0.9 },
-    { x:  0.95, z: -0.95, size: 0.30, sx: 1.0, sy: 0.6,  sz: 0.95 },
+    { x: -1.15, z: -1.10, size: 0.30, sx: 1.0, sy: 0.6,  sz: 0.95 },
+    { x:  0.00, z: -1.35, size: 0.32, sx: 1.1, sy: 0.55, sz: 0.9 },
+    { x:  1.15, z: -1.10, size: 0.30, sx: 1.0, sy: 0.6,  sz: 0.95 },
   ];
   closeRockSpecs.forEach((spec, i) => {
     rocks.push(makeShaderRock(scene, `rockClose${i}`, spec, groundY, rockMat));
@@ -810,16 +812,17 @@ function makeShaderRock(
     const i = vi * 3;
     const px = positions[i],     py = positions[i + 1], pz = positions[i + 2];
     const nx = normals[i],       ny = normals[i + 1],   nz = normals[i + 2];
-    // Big sharp jitter along the normal — drives the jagged silhouette
-    const jitter = (vrand(vi) - 0.4) * 0.85;     // mostly outward
+    // Sharp jitter along the normal — drives the jagged silhouette, but
+    // centered so the rock doesn't grow noticeably past its nominal radius.
+    const jitter = (vrand(vi) - 0.5) * 0.45;
     const lpx = px / Math.max(spec.size, 0.01);
     const lpy = py / Math.max(spec.size, 0.01);
     const lpz = pz / Math.max(spec.size, 0.01);
-    const macro = (valueNoise3(lpx * 1.6 + seed, lpy * 1.6, lpz * 1.6) - 0.5) * 0.45;
+    const macro = (valueNoise3(lpx * 1.6 + seed, lpy * 1.6, lpz * 1.6) - 0.5) * 0.30;
     const d = (jitter + macro) * spec.size;
     // Anisotropic squeeze along stretchA axis
     const along = nx * sax + nz * saz;
-    const aniso = along * 0.4 * spec.size * (vrand(vi + 991) * 0.4 + 0.7);
+    const aniso = along * 0.25 * spec.size * (vrand(vi + 991) * 0.4 + 0.7);
     positions[i]     = px + nx * d + sax * aniso;
     positions[i + 1] = py + ny * d;
     positions[i + 2] = pz + nz * d + saz * aniso;

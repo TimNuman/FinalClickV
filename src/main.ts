@@ -45,6 +45,7 @@ const vfx = new VFX({
   hudRoot,
   cameraShake,
   getIntensity: () => refs.intensity(),
+  getLevel: () => state.level,
 });
 
 // === Hold-to-press, release-to-commit flow ===

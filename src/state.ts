@@ -66,8 +66,8 @@ export class GameState {
   private recoveryEndAt = 0;
 
   recoveryDuration(): number {
-    // 1.5s at level 1, asymptoting toward ~0.45s deep into the game.
-    return 0.45 + 1.05 / (1 + (this.level - 1) * 0.07);
+    // 0.5s at level 1, easing toward ~0.15s deep into the game.
+    return 0.15 + 0.35 / (1 + (this.level - 1) * 0.08);
   }
 
   canClick(now: number = performance.now()): boolean {

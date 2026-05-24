@@ -794,38 +794,43 @@ function makeShaderRock(
     scene,
   );
   const positions = mesh.getVerticesData(VertexBuffer.PositionKind) as Float32Array;
-  const normals = mesh.getVerticesData(VertexBuffer.NormalKind) as Float32Array;
   const seed = (spec.x * 13.37 + spec.z * 7.91) % 100;
+  const seedI = Math.floor((spec.x * 91.7 + spec.z * 53.1) * 1000) | 0;
   // Anisotropic stretch axis — gives the rock an obvious "long" dimension
   const stretchA = Math.random() * Math.PI * 2;
   const sax = Math.cos(stretchA), saz = Math.sin(stretchA);
-  // Build a per-vertex displacement: each vertex independently jitters by a large
-  // amount → with flat shading later, every face becomes a hard-angled shard.
-  const vCount = positions.length / 3;
-  // Stable per-vertex random based on vertex index + rock seed
-  const vrand = (i: number) => {
-    let h = ((i * 374761393) ^ ((seed * 1000) | 0) * 668265263) >>> 0;
-    h = (h ^ (h >>> 13)) * 1274126177 >>> 0;
-    return ((h ^ (h >>> 16)) >>> 0) / 4294967295;
+  // CreateIcoSphere duplicates vertices at the UV seam, so per-vertex-INDEX
+  // jitter would split the mesh open. Hash from the integer-quantized position
+  // instead — coincident vertices always get identical displacement, so the
+  // shell stays welded.
+  const inv = 1 / Math.max(spec.size, 0.001);
+  const posJitter = (px: number, py: number, pz: number, salt: number) => {
+    const qx = Math.round(px * 4096) | 0;
+    const qy = Math.round(py * 4096) | 0;
+    const qz = Math.round(pz * 4096) | 0;
+    let h = (qx * 374761393) ^ (qy * 668265263) ^ (qz * 1274126177) ^ seedI ^ salt;
+    h = (h ^ (h >>> 13)) * 1274126177;
+    return (((h ^ (h >>> 16)) >>> 0) / 4294967295);
   };
+  const vCount = positions.length / 3;
   for (let vi = 0; vi < vCount; vi++) {
     const i = vi * 3;
     const px = positions[i],     py = positions[i + 1], pz = positions[i + 2];
-    const nx = normals[i],       ny = normals[i + 1],   nz = normals[i + 2];
-    // Sharp jitter along the normal — drives the jagged silhouette, but
-    // centered so the rock doesn't grow noticeably past its nominal radius.
-    const jitter = (vrand(vi) - 0.5) * 0.45;
-    const lpx = px / Math.max(spec.size, 0.01);
-    const lpy = py / Math.max(spec.size, 0.01);
-    const lpz = pz / Math.max(spec.size, 0.01);
+    // Use the position direction (== sphere normal) so duplicate vertices share
+    // the same displacement vector.
+    const len = Math.sqrt(px * px + py * py + pz * pz) || 1;
+    const dx = px / len, dy = py / len, dz = pz / len;
+    // Sharp jitter, position-keyed
+    const jitter = (posJitter(px, py, pz, 0) - 0.5) * 0.45;
+    const lpx = px * inv, lpy = py * inv, lpz = pz * inv;
     const macro = (valueNoise3(lpx * 1.6 + seed, lpy * 1.6, lpz * 1.6) - 0.5) * 0.30;
     const d = (jitter + macro) * spec.size;
-    // Anisotropic squeeze along stretchA axis
-    const along = nx * sax + nz * saz;
-    const aniso = along * 0.25 * spec.size * (vrand(vi + 991) * 0.4 + 0.7);
-    positions[i]     = px + nx * d + sax * aniso;
-    positions[i + 1] = py + ny * d;
-    positions[i + 2] = pz + nz * d + saz * aniso;
+    // Anisotropic squeeze along stretchA axis (also position-keyed)
+    const along = dx * sax + dz * saz;
+    const aniso = along * 0.25 * spec.size * (posJitter(px, py, pz, 991) * 0.4 + 0.7);
+    positions[i]     = px + dx * d + sax * aniso;
+    positions[i + 1] = py + dy * d;
+    positions[i + 2] = pz + dz * d + saz * aniso;
   }
   mesh.updateVerticesData(VertexBuffer.PositionKind, positions);
   // Recompute smooth normals, then flatten so every triangle reads as a hard facet.

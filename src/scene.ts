@@ -5,20 +5,26 @@ import {
   Color4,
   DefaultRenderingPipeline,
   DirectionalLight,
+  Effect,
   Engine,
   GlowLayer,
   HemisphericLight,
+  Matrix,
   Mesh,
   MeshBuilder,
   Observable,
   ParticleSystem,
   PointerEventTypes,
   PointLight,
+  Quaternion,
   Scene,
+  ShaderMaterial,
   StandardMaterial,
   Texture,
   TransformNode,
   Vector3,
+  VertexBuffer,
+  VertexData,
 } from "@babylonjs/core";
 
 export interface SceneRefs {
@@ -46,6 +52,8 @@ export interface SceneRefs {
 }
 
 export function createScene(canvas: HTMLCanvasElement): SceneRefs {
+  registerLandscapeShaders();
+
   const engine = new Engine(canvas, true, {
     preserveDrawingBuffer: true,
     stencil: true,
@@ -103,35 +111,87 @@ export function createScene(canvas: HTMLCanvasElement): SceneRefs {
   floorMat.specularColor = new Color3(0, 0, 0);
   floor.material = floorMat;
 
+  // Shared rock shader material — all rocks use it (one bind, many draws)
+  const rockMat = createRockMaterial(scene);
+
   // Rocks clustered around the base + scattered farther out
   const rocks: Mesh[] = [];
-  // Close cluster — visually plants the tilted button on a rocky outcrop
-  for (let i = 0; i < 7; i++) {
-    const r = makeRock(scene, `rockClose${i}`, 0.32 + Math.random() * 0.35, groundY);
-    const angle = (i / 7) * Math.PI * 2 + (Math.random() - 0.5) * 0.5;
-    const dist = 0.75 + Math.random() * 0.6;
-    r.position.x = Math.cos(angle) * dist;
-    r.position.z = Math.sin(angle) * dist;
-    rocks.push(r);
-  }
+
+  // Close cluster — hand-placed so the tilted button looks nestled in a rock pile.
+  // Button cap faces -Z (toward camera); base tilts into +Z. So we cluster larger
+  // rocks behind (+Z) and on the sides, with low/small rocks in front (-Z) so the
+  // cap stays fully visible.
+  // Button footprint (after the -π/4 tilt) reaches roughly z ≈ +1.3 at the
+  // base back rim and ±0.85 on the sides. Keep rocks clear of that volume.
+  const closeRockSpecs: { x: number; z: number; size: number; sx: number; sy: number; sz: number }[] = [
+    // Tall mountain shards BEHIND the button — jut up to frame the cap
+    { x: -1.65, z:  2.30, size: 0.60, sx: 1.1, sy: 1.9, sz: 1.2 },
+    { x:  0.10, z:  2.65, size: 0.72, sx: 1.3, sy: 2.1, sz: 1.3 },
+    { x:  1.75, z:  2.15, size: 0.58, sx: 1.1, sy: 1.8, sz: 1.3 },
+    // Mid rocks tucked into the corners behind the base
+    { x: -1.10, z:  1.85, size: 0.42, sx: 1.0, sy: 1.3, sz: 1.0 },
+    { x:  1.20, z:  1.75, size: 0.45, sx: 1.0, sy: 1.4, sz: 1.0 },
+    // Angular side shards flanking the base (well clear of x≈±0.85 footprint)
+    { x: -2.15, z:  0.55, size: 0.55, sx: 1.1, sy: 1.5, sz: 1.2 },
+    { x:  2.15, z:  0.45, size: 0.55, sx: 1.1, sy: 1.5, sz: 1.2 },
+    { x: -1.85, z: -0.30, size: 0.40, sx: 1.0, sy: 1.0, sz: 1.0 },
+    { x:  1.85, z: -0.25, size: 0.40, sx: 1.0, sy: 1.0, sz: 1.0 },
+    // Low rocks in FRONT — kept short so the cap stays fully visible
+    { x: -1.15, z: -1.10, size: 0.30, sx: 1.0, sy: 0.6,  sz: 0.95 },
+    { x:  0.00, z: -1.35, size: 0.32, sx: 1.1, sy: 0.55, sz: 0.9 },
+    { x:  1.15, z: -1.10, size: 0.30, sx: 1.0, sy: 0.6,  sz: 0.95 },
+  ];
+  closeRockSpecs.forEach((spec, i) => {
+    rocks.push(makeShaderRock(scene, `rockClose${i}`, spec, groundY, rockMat));
+  });
+
   // Mid-distance scatter
-  for (let i = 0; i < 14; i++) {
-    const r = makeRock(scene, `rockMid${i}`, 0.18 + Math.random() * 0.55, groundY);
+  for (let i = 0; i < 18; i++) {
     const angle = Math.random() * Math.PI * 2;
-    const dist = 2.5 + Math.random() * 9;
-    r.position.x = Math.cos(angle) * dist;
-    r.position.z = Math.sin(angle) * dist;
-    rocks.push(r);
+    const dist = 2.6 + Math.random() * 9;
+    const size = 0.22 + Math.random() * 0.55;
+    rocks.push(
+      makeShaderRock(
+        scene,
+        `rockMid${i}`,
+        {
+          x: Math.cos(angle) * dist,
+          z: Math.sin(angle) * dist,
+          size,
+          sx: 0.7 + Math.random() * 0.7,
+          sy: 0.5 + Math.random() * 0.6,
+          sz: 0.7 + Math.random() * 0.7,
+        },
+        groundY,
+        rockMat,
+      ),
+    );
   }
   // Far boulders near the mountain ring
-  for (let i = 0; i < 8; i++) {
-    const r = makeRock(scene, `rockFar${i}`, 0.6 + Math.random() * 1.1, groundY);
+  for (let i = 0; i < 10; i++) {
     const angle = Math.random() * Math.PI * 2;
     const dist = 13 + Math.random() * 8;
-    r.position.x = Math.cos(angle) * dist;
-    r.position.z = Math.sin(angle) * dist;
-    rocks.push(r);
+    const size = 0.65 + Math.random() * 1.1;
+    rocks.push(
+      makeShaderRock(
+        scene,
+        `rockFar${i}`,
+        {
+          x: Math.cos(angle) * dist,
+          z: Math.sin(angle) * dist,
+          size,
+          sx: 0.8 + Math.random() * 0.6,
+          sy: 0.6 + Math.random() * 0.5,
+          sz: 0.8 + Math.random() * 0.6,
+        },
+        groundY,
+        rockMat,
+      ),
+    );
   }
+
+  // Tall grass blades — thin-instanced field with wind shader
+  const grass = createGrassField(scene, groundY, 2.05);
 
   // Mountain ring in the distance — low-poly cones
   const mountains: Mesh[] = [];
@@ -314,10 +374,22 @@ export function createScene(canvas: HTMLCanvasElement): SceneRefs {
   } | null = null;
   let lastCameraAngleIdx = 0;
 
+  // Light direction shared with shader materials (matches keyLight)
+  const sceneLightDir = keyLight.direction.normalizeToNew();
+
   scene.onBeforeRenderObservable.add(() => {
     const dt = engine.getDeltaTime() / 1000;
     t += dt;
     const vis = visualIntensity(currentLevel);
+
+    // Drive shader-based grass + rocks
+    grass.material.setFloat("time", t);
+    grass.material.setVector3("cameraPosition", camera.position);
+    rockMat.setVector3("cameraPosition", camera.position);
+    // Light direction softly rotates with day→night to keep things lively
+    const ld = sceneLightDir;
+    grass.material.setVector3("lightDir", ld);
+    rockMat.setVector3("lightDir", ld);
 
     // Resolve active camera move (ease-out cubic)
     if (cameraMove) {
@@ -482,6 +554,20 @@ export function createScene(canvas: HTMLCanvasElement): SceneRefs {
       lerp(1, 0.35, v),
       lerp(1, 0.4, v),
     );
+
+    // Shader grass + rocks dim with sky
+    const dark = lerp(1.0, 0.42, v);
+    grass.material.setFloat("darknessFactor", dark);
+    rockMat.setFloat("darknessFactor", dark);
+    // Light color shifts cool at night, warm in day (matches keyLight tint)
+    const lc = Color3.Lerp(new Color3(1, 0.96, 0.85), new Color3(0.55, 0.62, 0.95), v);
+    const ac = Color3.Lerp(new Color3(0.42, 0.46, 0.52), new Color3(0.18, 0.2, 0.32), v);
+    grass.material.setColor3("lightColor", lc);
+    grass.material.setColor3("ambientColor", ac);
+    rockMat.setColor3("lightColor", lc);
+    rockMat.setColor3("ambientColor", ac);
+    // Wind picks up slightly with intensity (more dramatic late game)
+    grass.material.setFloat("windStrength", 0.22 + v * 0.18);
 
     // Button red dome gets a subtle inner glow at higher levels
     topMat.emissiveColor = new Color3(0.6 * v * 0.5, 0.03 * v, 0.03 * v);
@@ -686,25 +772,455 @@ function createGrassTexture(scene: Scene): Texture {
   return tex;
 }
 
-function makeRock(scene: Scene, name: string, size: number, groundY: number): Mesh {
-  // Mix of polyhedron types for variety; CreatePolyhedron type 0..14, low-poly chunky shapes
-  const type = [0, 1, 2, 3, 4][Math.floor(Math.random() * 5)];
-  const m = MeshBuilder.CreatePolyhedron(name, { type, size }, scene);
-  m.scaling.x = 0.7 + Math.random() * 0.8;
-  m.scaling.y = 0.45 + Math.random() * 0.6;
-  m.scaling.z = 0.7 + Math.random() * 0.8;
-  m.rotation.x = Math.random() * Math.PI * 2;
-  m.rotation.y = Math.random() * Math.PI * 2;
-  m.rotation.z = Math.random() * Math.PI * 2;
-  m.position.y = groundY + size * 0.25; // partly buried
-  const mat = new StandardMaterial(`${name}Mat`, scene);
-  const grey = 0.35 + Math.random() * 0.25;
-  // Earthy grey-brown
-  mat.diffuseColor = new Color3(grey, grey * 0.95, grey * 0.85);
-  mat.specularColor = new Color3(0.08, 0.08, 0.08);
-  mat.specularPower = 24;
-  m.material = mat;
+// ===========================================================================
+// Shader-based rocks: displaced icosphere with fbm-noise procedural texturing.
+// ===========================================================================
+
+type RockSpec = { x: number; z: number; size: number; sx: number; sy: number; sz: number };
+
+function makeShaderRock(
+  scene: Scene,
+  name: string,
+  spec: RockSpec,
+  groundY: number,
+  mat: ShaderMaterial,
+): Mesh {
+  // Very low subdivision = big triangular facets, like mountain shale shards.
+  // subdivisions=1 gives 20 triangles (icosahedron); 2 gives 80 (still chunky).
+  const subdivisions = spec.size > 0.7 ? 2 : 1;
+  const mesh = MeshBuilder.CreateIcoSphere(
+    name,
+    { radius: spec.size, subdivisions, flat: false },
+    scene,
+  );
+  const positions = mesh.getVerticesData(VertexBuffer.PositionKind) as Float32Array;
+  const seed = (spec.x * 13.37 + spec.z * 7.91) % 100;
+  const seedI = Math.floor((spec.x * 91.7 + spec.z * 53.1) * 1000) | 0;
+  // Anisotropic stretch axis — gives the rock an obvious "long" dimension
+  const stretchA = Math.random() * Math.PI * 2;
+  const sax = Math.cos(stretchA), saz = Math.sin(stretchA);
+  // CreateIcoSphere duplicates vertices at the UV seam, so per-vertex-INDEX
+  // jitter would split the mesh open. Hash from the integer-quantized position
+  // instead — coincident vertices always get identical displacement, so the
+  // shell stays welded.
+  const inv = 1 / Math.max(spec.size, 0.001);
+  const posJitter = (px: number, py: number, pz: number, salt: number) => {
+    const qx = Math.round(px * 4096) | 0;
+    const qy = Math.round(py * 4096) | 0;
+    const qz = Math.round(pz * 4096) | 0;
+    let h = (qx * 374761393) ^ (qy * 668265263) ^ (qz * 1274126177) ^ seedI ^ salt;
+    h = (h ^ (h >>> 13)) * 1274126177;
+    return (((h ^ (h >>> 16)) >>> 0) / 4294967295);
+  };
+  const vCount = positions.length / 3;
+  for (let vi = 0; vi < vCount; vi++) {
+    const i = vi * 3;
+    const px = positions[i],     py = positions[i + 1], pz = positions[i + 2];
+    // Use the position direction (== sphere normal) so duplicate vertices share
+    // the same displacement vector.
+    const len = Math.sqrt(px * px + py * py + pz * pz) || 1;
+    const dx = px / len, dy = py / len, dz = pz / len;
+    // Sharp jitter, position-keyed
+    const jitter = (posJitter(px, py, pz, 0) - 0.5) * 0.45;
+    const lpx = px * inv, lpy = py * inv, lpz = pz * inv;
+    const macro = (valueNoise3(lpx * 1.6 + seed, lpy * 1.6, lpz * 1.6) - 0.5) * 0.30;
+    const d = (jitter + macro) * spec.size;
+    // Anisotropic squeeze along stretchA axis (also position-keyed)
+    const along = dx * sax + dz * saz;
+    const aniso = along * 0.25 * spec.size * (posJitter(px, py, pz, 991) * 0.4 + 0.7);
+    positions[i]     = px + dx * d + sax * aniso;
+    positions[i + 1] = py + dy * d;
+    positions[i + 2] = pz + dz * d + saz * aniso;
+  }
+  mesh.updateVerticesData(VertexBuffer.PositionKind, positions);
+  // Recompute smooth normals, then flatten so every triangle reads as a hard facet.
+  const smoothNormals: number[] = [];
+  VertexData.ComputeNormals(positions, mesh.getIndices() as number[], smoothNormals);
+  mesh.updateVerticesData(VertexBuffer.NormalKind, smoothNormals);
+  // Flat shading: duplicates vertices and snaps normals to face normals,
+  // giving the rock visible polygonal facets like mountain shale.
+  mesh.convertToFlatShadedMesh();
+
+  mesh.scaling.set(spec.sx, spec.sy, spec.sz);
+  mesh.rotation.y = Math.random() * Math.PI * 2;
+  mesh.rotation.x = (Math.random() - 0.5) * 0.5;
+  mesh.rotation.z = (Math.random() - 0.5) * 0.5;
+  mesh.position.x = spec.x;
+  mesh.position.z = spec.z;
+  // Partially bury so the rock looks set into the ground
+  mesh.position.y = groundY + spec.size * spec.sy * 0.3;
+  mesh.material = mat;
+  return mesh;
+}
+
+function createRockMaterial(scene: Scene): ShaderMaterial {
+  const mat = new ShaderMaterial(
+    "rockMat",
+    scene,
+    { vertex: "rock", fragment: "rock" },
+    {
+      attributes: ["position", "normal"],
+      uniforms: [
+        "world", "worldView", "worldViewProjection", "view", "viewProjection", "projection",
+        "lightDir", "lightColor", "ambientColor", "cameraPosition",
+        "baseColor", "darkColor", "mossColor", "darknessFactor",
+      ],
+    },
+  );
+  mat.setColor3("baseColor", new Color3(0.48, 0.48, 0.5));
+  mat.setColor3("darkColor", new Color3(0.16, 0.17, 0.2));
+  mat.setColor3("mossColor", new Color3(0.32, 0.42, 0.24));
+  mat.setVector3("lightDir", new Vector3(-0.4, -1, -0.3).normalize());
+  mat.setColor3("lightColor", new Color3(1, 0.96, 0.85));
+  mat.setColor3("ambientColor", new Color3(0.42, 0.46, 0.52));
+  mat.setVector3("cameraPosition", new Vector3(0, 1, -7));
+  mat.setFloat("darknessFactor", 1.0);
+  return mat;
+}
+
+// ===========================================================================
+// Wind-driven grass field — single tapered blade mesh, thin-instanced.
+// ===========================================================================
+
+function createGrassField(
+  scene: Scene,
+  groundY: number,
+  exclusionRadius: number,
+): { mesh: Mesh; material: ShaderMaterial } {
+  const blade = buildGrassBladeMesh(scene);
+  const mat = new ShaderMaterial(
+    "grassMat",
+    scene,
+    { vertex: "grass", fragment: "grass" },
+    {
+      attributes: ["position", "normal", "uv", "world0", "world1", "world2", "world3"],
+      uniforms: [
+        "view", "viewProjection", "projection",
+        "time", "windDir", "windStrength",
+        "baseColor", "tipColor", "lightDir", "lightColor", "ambientColor",
+        "cameraPosition", "darknessFactor",
+      ],
+    },
+  );
+  mat.backFaceCulling = false;
+  mat.setColor3("baseColor", new Color3(0.15, 0.32, 0.10));
+  mat.setColor3("tipColor", new Color3(0.62, 0.78, 0.34));
+  mat.setVector3("windDir", new Vector3(0.85, 0, 0.52));
+  mat.setFloat("windStrength", 0.22);
+  mat.setVector3("lightDir", new Vector3(-0.4, -1, -0.3).normalize());
+  mat.setColor3("lightColor", new Color3(1, 0.96, 0.85));
+  mat.setColor3("ambientColor", new Color3(0.42, 0.46, 0.52));
+  mat.setVector3("cameraPosition", new Vector3(0, 1, -7));
+  mat.setFloat("darknessFactor", 1.0);
+  mat.setFloat("time", 0);
+  blade.material = mat;
+
+  // Generate thin-instance world matrices on a jittered grid.
+  const radius = 14;
+  const target = 16000;
+  const excl2 = exclusionRadius * exclusionRadius;
+  const buf = new Float32Array(target * 16);
+  const tmpScale = new Vector3();
+  const tmpQuat = new Quaternion();
+  const tmpPos = new Vector3();
+  const upAxis = new Vector3(0, 1, 0);
+  const m = new Matrix();
+  let placed = 0;
+  let tries = 0;
+  while (placed < target && tries < target * 4) {
+    tries++;
+    // Uniform-in-disk sampling
+    const r = Math.sqrt(Math.random()) * radius;
+    const theta = Math.random() * Math.PI * 2;
+    const x = Math.cos(theta) * r;
+    const z = Math.sin(theta) * r;
+    if (x * x + z * z < excl2) continue;
+    // Density falloff with distance — sparser further out
+    const falloff = 1 - r / radius;
+    if (Math.random() > 0.25 + 0.75 * falloff) continue;
+
+    const heightJitter = 0.65 + Math.random() * 0.7;
+    const widthJitter = 0.7 + Math.random() * 0.6;
+    tmpScale.set(widthJitter, heightJitter, widthJitter);
+    Quaternion.RotationAxisToRef(upAxis, Math.random() * Math.PI * 2, tmpQuat);
+    tmpPos.set(x, groundY + 0.001, z);
+    Matrix.ComposeToRef(tmpScale, tmpQuat, tmpPos, m);
+    m.copyToArray(buf, placed * 16);
+    placed++;
+  }
+  // Trim to actual count
+  const final = placed === target ? buf : buf.slice(0, placed * 16);
+  blade.thinInstanceSetBuffer("matrix", final, 16, true);
+  // Ensure bounding info covers the entire field so frustum culling doesn't drop blades.
+  blade.alwaysSelectAsActiveMesh = true;
+
+  return { mesh: blade, material: mat };
+}
+
+function buildGrassBladeMesh(scene: Scene): Mesh {
+  const vd = new VertexData();
+  // Tapered blade pointing up (y+), base at y=0.
+  const W = 0.022;
+  const H = 0.34;
+  vd.positions = [
+    -W,      0.00, 0,
+     W,      0.00, 0,
+    -W * 0.85, H * 0.45, 0,
+     W * 0.85, H * 0.45, 0,
+    -W * 0.55, H * 0.75, 0,
+     W * 0.55, H * 0.75, 0,
+     0.0,    H,    0,
+  ];
+  vd.uvs = [
+    0, 0,
+    1, 0,
+    0, 0.45,
+    1, 0.45,
+    0, 0.75,
+    1, 0.75,
+    0.5, 1,
+  ];
+  // Normal: blade is flat — facing +Z; we draw double-sided so this is OK.
+  vd.normals = [
+    0, 0, 1, 0, 0, 1, 0, 0, 1,
+    0, 0, 1, 0, 0, 1, 0, 0, 1,
+    0, 0, 1,
+  ];
+  vd.indices = [
+    0, 2, 1,   1, 2, 3,   // bottom segment
+    2, 4, 3,   3, 4, 5,   // middle segment
+    4, 6, 5,             // tip triangle
+  ];
+  const m = new Mesh("grassBlade", scene);
+  vd.applyToMesh(m);
   return m;
+}
+
+// === GLSL shaders ===
+
+let shadersRegistered = false;
+function registerLandscapeShaders(): void {
+  if (shadersRegistered) return;
+  shadersRegistered = true;
+
+  Effect.ShadersStore["grassVertexShader"] = `
+    precision highp float;
+    attribute vec3 position;
+    attribute vec3 normal;
+    attribute vec2 uv;
+    attribute vec4 world0;
+    attribute vec4 world1;
+    attribute vec4 world2;
+    attribute vec4 world3;
+
+    uniform mat4 viewProjection;
+    uniform float time;
+    uniform vec3 windDir;
+    uniform float windStrength;
+
+    varying float vHeight;
+    varying vec3 vWorldPos;
+    varying vec3 vNormal;
+    varying float vBladeId;
+
+    void main() {
+      mat4 instWorld = mat4(world0, world1, world2, world3);
+      vec4 wp = instWorld * vec4(position, 1.0);
+
+      float h = clamp(uv.y, 0.0, 1.0);
+      float bend = h * h;
+
+      // Spatial wind: smooth gusts traveling across the field
+      float pid = wp.x * 0.42 + wp.z * 0.55;
+      float gust = sin(pid + time * 1.6) * 0.6
+                 + sin(pid * 0.31 + time * 0.7 + 2.1) * 0.4;
+      // Per-blade flutter
+      float flutter = sin(time * 3.4 + wp.x * 11.0 + wp.z * 13.0) * 0.18;
+      float sway = (gust + flutter) * windStrength * bend;
+
+      wp.x += windDir.x * sway;
+      wp.z += windDir.z * sway;
+      // Sink slightly when bent so the tip arcs instead of stretching
+      wp.y -= bend * abs(sway) * 0.25;
+
+      vHeight = h;
+      vWorldPos = wp.xyz;
+      vNormal = normalize((instWorld * vec4(normal, 0.0)).xyz);
+      vBladeId = floor(instWorld[3].x * 3.7 + instWorld[3].z * 2.3);
+
+      gl_Position = viewProjection * wp;
+    }
+  `;
+
+  Effect.ShadersStore["grassFragmentShader"] = `
+    precision highp float;
+    varying float vHeight;
+    varying vec3 vWorldPos;
+    varying vec3 vNormal;
+    varying float vBladeId;
+
+    uniform vec3 baseColor;
+    uniform vec3 tipColor;
+    uniform vec3 lightDir;
+    uniform vec3 lightColor;
+    uniform vec3 ambientColor;
+    uniform float darknessFactor;
+
+    float hash11(float p) { return fract(sin(p * 91.345) * 47453.5); }
+
+    void main() {
+      // Vertical gradient base→tip
+      vec3 col = mix(baseColor, tipColor, vHeight);
+      // Per-blade tint variation
+      float v = hash11(vBladeId);
+      col *= 0.78 + 0.42 * v;
+      // Fake ambient occlusion at the base
+      col *= 0.35 + 0.75 * vHeight;
+
+      // Soft lambert — clamp floor so back-facing blades aren't pitch black
+      vec3 n = normalize(vNormal);
+      vec3 ldir = normalize(-lightDir);
+      float ndotl = max(0.25, abs(dot(n, ldir)));
+      col *= (ambientColor + lightColor * ndotl);
+
+      col *= darknessFactor;
+      gl_FragColor = vec4(col, 1.0);
+    }
+  `;
+
+  Effect.ShadersStore["rockVertexShader"] = `
+    precision highp float;
+    attribute vec3 position;
+    attribute vec3 normal;
+
+    uniform mat4 world;
+    uniform mat4 viewProjection;
+
+    varying vec3 vWorldPos;
+    varying vec3 vNormal;
+    varying vec3 vLocalPos;
+
+    void main() {
+      vec4 wp = world * vec4(position, 1.0);
+      vWorldPos = wp.xyz;
+      vNormal = normalize(mat3(world) * normal);
+      vLocalPos = position;
+      gl_Position = viewProjection * wp;
+    }
+  `;
+
+  Effect.ShadersStore["rockFragmentShader"] = `
+    precision highp float;
+    varying vec3 vWorldPos;
+    varying vec3 vNormal;
+    varying vec3 vLocalPos;
+
+    uniform vec3 lightDir;
+    uniform vec3 lightColor;
+    uniform vec3 ambientColor;
+    uniform vec3 cameraPosition;
+    uniform vec3 baseColor;
+    uniform vec3 darkColor;
+    uniform vec3 mossColor;
+    uniform float darknessFactor;
+
+    float hash13(vec3 p) {
+      p = fract(p * vec3(443.897, 441.423, 437.195));
+      p += dot(p, p.yzx + 19.19);
+      return fract((p.x + p.y) * p.z);
+    }
+
+    float vnoise(vec3 p) {
+      vec3 i = floor(p);
+      vec3 f = fract(p);
+      f = f * f * (3.0 - 2.0 * f);
+      float n000 = hash13(i);
+      float n100 = hash13(i + vec3(1.0, 0.0, 0.0));
+      float n010 = hash13(i + vec3(0.0, 1.0, 0.0));
+      float n110 = hash13(i + vec3(1.0, 1.0, 0.0));
+      float n001 = hash13(i + vec3(0.0, 0.0, 1.0));
+      float n101 = hash13(i + vec3(1.0, 0.0, 1.0));
+      float n011 = hash13(i + vec3(0.0, 1.0, 1.0));
+      float n111 = hash13(i + vec3(1.0, 1.0, 1.0));
+      float nx00 = mix(n000, n100, f.x);
+      float nx10 = mix(n010, n110, f.x);
+      float nx01 = mix(n001, n101, f.x);
+      float nx11 = mix(n011, n111, f.x);
+      float nxy0 = mix(nx00, nx10, f.y);
+      float nxy1 = mix(nx01, nx11, f.y);
+      return mix(nxy0, nxy1, f.z);
+    }
+
+    float fbm(vec3 p) {
+      float v = 0.0;
+      float a = 0.5;
+      for (int i = 0; i < 4; i++) {
+        v += a * vnoise(p);
+        p *= 2.03;
+        a *= 0.5;
+      }
+      return v;
+    }
+
+    void main() {
+      vec3 n = normalize(vNormal);
+
+      // Procedural rock color from local-space fbm so the pattern stays put.
+      float macro = fbm(vLocalPos * 2.2);
+      float crev = fbm(vLocalPos * 8.5 + 11.3);
+      vec3 base = mix(darkColor, baseColor, smoothstep(0.25, 0.85, macro));
+      // Darker noise streaks for crevices
+      base *= 0.6 + 0.7 * crev;
+
+      // Sparse moss only on the most upward-facing facets — mountain rock, not riverbed.
+      float up = clamp(n.y, 0.0, 1.0);
+      float mossPattern = fbm(vLocalPos * 3.7 + 7.0);
+      float mossMask = smoothstep(0.78, 0.98, up) * smoothstep(0.55, 0.85, mossPattern);
+      base = mix(base, mossColor, mossMask * 0.4);
+
+      // Slight cool tint in shadowed crevices (slate-blue undertone)
+      base = mix(base, base * vec3(0.85, 0.9, 1.05), (1.0 - up) * 0.35);
+
+      // Lambert + ambient
+      vec3 ldir = normalize(-lightDir);
+      float ndotl = max(0.0, dot(n, ldir));
+      vec3 col = base * (ambientColor + lightColor * ndotl);
+
+      // Rim light — picks out silhouette against background
+      vec3 vdir = normalize(cameraPosition - vWorldPos);
+      float rim = pow(1.0 - max(0.0, dot(n, vdir)), 2.5);
+      col += rim * lightColor * 0.18;
+
+      col *= darknessFactor;
+      gl_FragColor = vec4(col, 1.0);
+    }
+  `;
+}
+
+// 3D value noise (CPU) — matches the GLSL implementation closely enough for
+// generating organic vertex displacements on rocks.
+function valueNoise3(x: number, y: number, z: number): number {
+  const xi = Math.floor(x), yi = Math.floor(y), zi = Math.floor(z);
+  const xf = x - xi, yf = y - yi, zf = z - zi;
+  const u = xf * xf * (3 - 2 * xf);
+  const v = yf * yf * (3 - 2 * yf);
+  const w = zf * zf * (3 - 2 * zf);
+  const r = (ix: number, iy: number, iz: number) => {
+    let h = (ix | 0) * 374761393 + (iy | 0) * 668265263 + (iz | 0) * 2147483647;
+    h = (h ^ (h >>> 13)) * 1274126177;
+    return ((h ^ (h >>> 16)) >>> 0) / 4294967295;
+  };
+  const c000 = r(xi, yi, zi),     c100 = r(xi + 1, yi, zi);
+  const c010 = r(xi, yi + 1, zi), c110 = r(xi + 1, yi + 1, zi);
+  const c001 = r(xi, yi, zi + 1), c101 = r(xi + 1, yi, zi + 1);
+  const c011 = r(xi, yi + 1, zi + 1), c111 = r(xi + 1, yi + 1, zi + 1);
+  const x00 = c000 * (1 - u) + c100 * u;
+  const x10 = c010 * (1 - u) + c110 * u;
+  const x01 = c001 * (1 - u) + c101 * u;
+  const x11 = c011 * (1 - u) + c111 * u;
+  const y0 = x00 * (1 - v) + x10 * v;
+  const y1 = x01 * (1 - v) + x11 * v;
+  return y0 * (1 - w) + y1 * w;
 }
 
 export function createRadialGradientTexture(

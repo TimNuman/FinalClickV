@@ -415,3 +415,98 @@ body {
   70% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
   100% { opacity: 0; transform: translate(-50%, -60%) scale(1.1); }
 }
+
+/* ===== MOBILE / SMALL SCREENS ===== */
+@media (max-width: 720px) {
+  .hud-top {
+    top: max(12px, env(safe-area-inset-top));
+    left: 8px;
+    right: 8px;
+    transform: none;
+    min-width: 0;
+    max-width: none;
+    width: auto;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: 12px;
+  }
+
+  .level-badge {
+    width: 44px;
+    height: 44px;
+    border-radius: 9px;
+    border-width: 1.5px;
+  }
+
+  .level-label { font-size: 7px; letter-spacing: 1px; }
+  .level-number { font-size: 18px; }
+
+  .xp-row { font-size: 10px; margin-bottom: 4px; }
+  .xp-bar { height: 10px; }
+
+  .stats-wrap {
+    left: max(8px, env(safe-area-inset-left));
+    right: auto;
+    top: auto;
+    bottom: max(12px, env(safe-area-inset-bottom));
+    transform: none;
+    width: 44vw;
+    max-width: 200px;
+    padding: 8px 10px;
+    border-radius: 10px;
+  }
+
+  .stat-row { padding: 3px 0; }
+  .stat-row span:first-child { font-size: 8.5px; letter-spacing: 1px; }
+  .stat-row span:last-child { font-size: 13px; }
+
+  .streak-wrap {
+    right: max(8px, env(safe-area-inset-right));
+    left: auto;
+    top: auto;
+    bottom: max(12px, env(safe-area-inset-bottom));
+    transform: none;
+    width: 38vw;
+    max-width: 150px;
+    padding: 8px 10px;
+    border-radius: 10px;
+  }
+
+  .streak-label { font-size: 8.5px; letter-spacing: 1.5px; }
+  .streak-number { font-size: 34px; margin: 2px 0 6px; }
+  .streak-bar { height: 7px; }
+  .streak-tier { font-size: 9px; letter-spacing: 1.5px; margin-top: 5px; min-height: 11px; }
+
+  .hit-text { font-size: 0.85em; }
+
+  .levelup-banner {
+    top: 32%;
+    font-size: 44px;
+    letter-spacing: 3px;
+    -webkit-text-stroke-width: 1.5px;
+  }
+  .levelup-banner .sub { letter-spacing: 5px; }
+}
+
+/* Landscape phones: top bar shrinks further, side panels go flush to corners */
+@media (max-width: 900px) and (orientation: landscape) and (max-height: 480px) {
+  .hud-top {
+    top: max(6px, env(safe-area-inset-top));
+    padding: 6px 10px;
+    gap: 8px;
+  }
+
+  .level-badge { width: 36px; height: 36px; }
+  .level-number { font-size: 15px; }
+  .level-label { font-size: 6.5px; }
+  .xp-bar { height: 8px; }
+  .xp-row { font-size: 9px; margin-bottom: 3px; }
+
+  .stats-wrap, .streak-wrap {
+    bottom: max(6px, env(safe-area-inset-bottom));
+    padding: 6px 9px;
+  }
+
+  .streak-number { font-size: 26px; }
+  .levelup-banner { top: 28%; font-size: 36px; }
+}

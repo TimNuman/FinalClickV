@@ -316,7 +316,6 @@ export function createScene(canvas: HTMLCanvasElement): SceneRefs {
   baseMat.specularColor = new Color3(0.25, 0.25, 0.25);
   baseMat.specularPower = 32;
   buttonBase.material = baseMat;
-  buttonBase.renderingGroupId = 1;
 
   // Outer ring (lip)
   const buttonRing = MeshBuilder.CreateCylinder(
@@ -331,7 +330,6 @@ export function createScene(canvas: HTMLCanvasElement): SceneRefs {
   ringMat.specularColor = new Color3(0.6, 0.6, 0.65);
   ringMat.specularPower = 80;
   buttonRing.material = ringMat;
-  buttonRing.renderingGroupId = 1;
 
   // The pressable top group — animates down on click
   const topGroup = new TransformNode("topGroup", scene);
@@ -351,10 +349,6 @@ export function createScene(canvas: HTMLCanvasElement): SceneRefs {
   topMat.specularPower = 72;
   topMat.emissiveColor = new Color3(0, 0, 0);
   buttonTop.material = topMat;
-  // Halo + core sit in group 0 (drawn first); the button parts go in group 1
-  // so they always render on top of the halo regardless of world-space depth.
-  // Shards orbit on top of everything in group 2.
-  buttonTop.renderingGroupId = 1;
 
   // === Halo + core (start invisible) ===
   const buttonHalo = MeshBuilder.CreateDisc("halo", { radius: 2.4, tessellation: 64 }, scene);
@@ -409,7 +403,6 @@ export function createScene(canvas: HTMLCanvasElement): SceneRefs {
     m.specularColor = new Color3(1, 1, 1);
     s.material = m;
     s.parent = buttonAnchor;
-    s.renderingGroupId = 2;
     s.isPickable = false;
     s.isVisible = false;
     shards.push(s);
@@ -507,14 +500,24 @@ export function createScene(canvas: HTMLCanvasElement): SceneRefs {
       topGroup.position.y = targetY;
     }
 
-    // Halo pulsing
-    if (buttonHalo.isVisible) {
-      const pulse = 1 + Math.sin(t * 1.8) * 0.04;
-      buttonHalo.scaling.set(pulse, pulse, pulse);
-    }
-    if (buttonCore.isVisible) {
-      const corePulse = 1 + Math.sin(t * 2.6) * 0.06;
-      buttonCore.scaling.set(corePulse, corePulse, corePulse);
+    // Halo + core: sit behind the cap relative to the camera so they never
+    // visually intersect the button geometry. Re-anchored every frame along
+    // the camera-to-cap direction, with halo a bit further than the core.
+    if (buttonHalo.isVisible || buttonCore.isVisible) {
+      const capPos = topGroup.getAbsolutePosition();
+      const dir = capPos.subtract(camera.position);
+      const len = dir.length() || 1;
+      dir.scaleInPlace(1 / len);
+      if (buttonHalo.isVisible) {
+        buttonHalo.setAbsolutePosition(capPos.add(dir.scale(1.6)));
+        const pulse = 1 + Math.sin(t * 1.8) * 0.04;
+        buttonHalo.scaling.set(pulse, pulse, pulse);
+      }
+      if (buttonCore.isVisible) {
+        buttonCore.setAbsolutePosition(capPos.add(dir.scale(1.3)));
+        const corePulse = 1 + Math.sin(t * 2.6) * 0.06;
+        buttonCore.scaling.set(corePulse, corePulse, corePulse);
+      }
     }
 
     // Shards orbit

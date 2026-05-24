@@ -48,6 +48,28 @@ const vfx = new VFX({
   getLevel: () => state.level,
 });
 
+// === Start screen: gate input until the player hits START ===
+const startScreen = document.getElementById("startScreen") as HTMLElement;
+const startButton = document.getElementById("startButton") as HTMLButtonElement;
+let gameStarted = false;
+
+function beginGame() {
+  if (gameStarted) return;
+  gameStarted = true;
+  startScreen.classList.add("hidden");
+}
+startButton.addEventListener("click", beginGame);
+// Also allow Enter/Space on the focused start button (default browser behaviour
+// would trigger a click, but listen explicitly so Space doesn't also fire a
+// game press through the keydown handler below).
+startButton.addEventListener("keydown", (e) => {
+  if (e.code === "Enter" || e.code === "Space") {
+    e.preventDefault();
+    e.stopPropagation();
+    beginGame();
+  }
+});
+
 // === Hold-to-press, release-to-commit flow ===
 //   - press input on the red cap → if recovery is ready, hold the dome down
 //   - release input → commit the click: state.click(), VFX, HUD, recovery starts
@@ -57,6 +79,7 @@ let pressX = 0;
 let pressY = 0;
 
 function tryPress(screenX: number, screenY: number) {
+  if (!gameStarted) return;
   if (holding) return;
   if (!state.canClick()) return;
   holding = true;

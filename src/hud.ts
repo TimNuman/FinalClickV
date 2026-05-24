@@ -95,7 +95,7 @@ export class HUD {
     const baseFont = 48;
     const maxFont = 96;
     banner.style.fontSize = `${Math.round(baseFont + (maxFont - baseFont) * intensity)}px`;
-    banner.innerHTML = `LEVEL ${level}<span class="sub">+POWER UNLOCKED</span>`;
+    banner.innerHTML = `<span class="label">Level</span><span class="num">${level}</span><span class="sub">+POWER UNLOCKED</span>`;
     this.hud.appendChild(banner);
     setTimeout(() => banner.remove(), 2300);
 

@@ -315,6 +315,7 @@ export function createScene(canvas: HTMLCanvasElement): SceneRefs {
   baseMat.specularColor = new Color3(0.25, 0.25, 0.25);
   baseMat.specularPower = 32;
   buttonBase.material = baseMat;
+  buttonBase.renderingGroupId = 1;
 
   // Outer ring (lip)
   const buttonRing = MeshBuilder.CreateCylinder(
@@ -329,6 +330,7 @@ export function createScene(canvas: HTMLCanvasElement): SceneRefs {
   ringMat.specularColor = new Color3(0.6, 0.6, 0.65);
   ringMat.specularPower = 80;
   buttonRing.material = ringMat;
+  buttonRing.renderingGroupId = 1;
 
   // The pressable top group — animates down on click
   const topGroup = new TransformNode("topGroup", scene);
@@ -348,6 +350,10 @@ export function createScene(canvas: HTMLCanvasElement): SceneRefs {
   topMat.specularPower = 72;
   topMat.emissiveColor = new Color3(0, 0, 0);
   buttonTop.material = topMat;
+  // Halo + core sit in group 0 (drawn first); the button parts go in group 1
+  // so they always render on top of the halo regardless of world-space depth.
+  // Shards orbit on top of everything in group 2.
+  buttonTop.renderingGroupId = 1;
 
   // === Halo + core (start invisible) ===
   const buttonHalo = MeshBuilder.CreateDisc("halo", { radius: 2.4, tessellation: 64 }, scene);
@@ -368,6 +374,10 @@ export function createScene(canvas: HTMLCanvasElement): SceneRefs {
   haloMat.alpha = 0;
   buttonHalo.material = haloMat;
   buttonHalo.isVisible = false;
+  // Halo / core / shards / grass sit visually in front of the cap at times.
+  // Disable picking on all of them so a pointer raycast always reaches buttonTop
+  // (otherwise a stray grass blade or orbiting shard can eat the click).
+  buttonHalo.isPickable = false;
 
   const buttonCore = MeshBuilder.CreateDisc("core", { radius: 1.5, tessellation: 48 }, scene);
   buttonCore.parent = buttonAnchor;
@@ -386,6 +396,7 @@ export function createScene(canvas: HTMLCanvasElement): SceneRefs {
   coreMat.alpha = 0;
   buttonCore.material = coreMat;
   buttonCore.isVisible = false;
+  buttonCore.isPickable = false;
 
   // === Orbiting shards (appear later) ===
   const shards: Mesh[] = [];
@@ -397,6 +408,8 @@ export function createScene(canvas: HTMLCanvasElement): SceneRefs {
     m.specularColor = new Color3(1, 1, 1);
     s.material = m;
     s.parent = buttonAnchor;
+    s.renderingGroupId = 2;
+    s.isPickable = false;
     s.isVisible = false;
     shards.push(s);
   }
@@ -1193,6 +1206,8 @@ function createGrassField(
   blade.thinInstanceSetBuffer("matrix", final, 16, true);
   // Ensure bounding info covers the entire field so frustum culling doesn't drop blades.
   blade.alwaysSelectAsActiveMesh = true;
+  // Grass blades can drift in front of the cap visually — keep clicks passing through.
+  blade.isPickable = false;
 
   return { mesh: blade, material: mat };
 }

@@ -590,6 +590,10 @@ body {
   top: 38%;
   left: 50%;
   transform: translate(-50%, -50%);
+  /* Stack a small left-aligned "Level" label above a large right-indented number */
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
   font-size: 86px;
   font-weight: 900;
   font-style: italic;
@@ -602,6 +606,26 @@ body {
   -webkit-text-stroke: 2px rgba(120, 53, 15, 0.9);
   pointer-events: none;
   animation: levelupAnim 2.2s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.levelup-banner .label {
+  display: block;
+  font-size: 0.42em;
+  font-weight: 800;
+  letter-spacing: 8px;
+  text-transform: uppercase;
+  text-align: left;
+  line-height: 1;
+  margin-bottom: 0.05em;
+}
+
+.levelup-banner .num {
+  display: block;
+  font-size: 1.5em;
+  line-height: 0.85;
+  text-align: right;
+  /* indent so the big number sits to the right of where "Level" starts */
+  padding-left: 1.2em;
 }
 
 .levelup-banner.subtle {
@@ -619,6 +643,7 @@ body {
   letter-spacing: 8px;
   color: #fff;
   margin-top: 8px;
+  text-align: center;
   -webkit-text-stroke: 1px rgba(0, 0, 0, 0.6);
 }
 

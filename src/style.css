@@ -52,8 +52,8 @@ body {
   display: flex;
   align-items: center;
   gap: 16px;
-  min-width: 480px;
-  max-width: 90vw;
+  /* Bounded so the top bar shrinks to fit narrow viewports instead of overflowing */
+  width: min(480px, calc(100vw - 32px));
   padding: 14px 18px;
   background: linear-gradient(180deg, rgba(20, 22, 35, 0.85), rgba(10, 12, 20, 0.75));
   border: 1px solid rgba(255, 255, 255, 0.1);
@@ -153,8 +153,7 @@ body {
 .streak-wrap {
   position: absolute;
   right: 28px;
-  top: 44%;
-  transform: translateY(-50%);
+  top: 128px; /* just below .hud-top so the panel never collides with the bottom bar */
   width: 140px;
   padding: 16px 14px;
   background: linear-gradient(180deg, rgba(20, 22, 35, 0.85), rgba(10, 12, 20, 0.75));
@@ -219,8 +218,7 @@ body {
 .stats-wrap {
   position: absolute;
   left: 28px;
-  top: 44%;
-  transform: translateY(-50%);
+  top: 128px; /* just below .hud-top so the panel never collides with the bottom bar */
   width: 180px;
   padding: 14px 16px;
   background: linear-gradient(180deg, rgba(20, 22, 35, 0.85), rgba(10, 12, 20, 0.75));
@@ -265,8 +263,8 @@ body {
   bottom: 28px;
   left: 50%;
   transform: translateX(-50%);
-  /* Full width (minus 16px margin per side) on narrow screens, capped at 320px */
-  width: min(320px, calc(100vw - 32px));
+  /* 90% of the viewport, capped at 480px — wide on phones, comfortable on desktop */
+  width: min(90vw, 480px);
   text-align: center;
   padding: 10px 14px;
   background: linear-gradient(180deg, rgba(20, 22, 35, 0.85), rgba(10, 12, 20, 0.75));
@@ -501,8 +499,9 @@ body {
   .stats-wrap {
     left: max(8px, env(safe-area-inset-left));
     right: auto;
-    top: auto;
-    bottom: max(12px, env(safe-area-inset-bottom));
+    /* Anchor to top corner so the bottom stays clear for the recovery bar */
+    top: calc(max(12px, env(safe-area-inset-top)) + 76px);
+    bottom: auto;
     transform: none;
     width: 44vw;
     max-width: 200px;
@@ -517,8 +516,8 @@ body {
   .streak-wrap {
     right: max(8px, env(safe-area-inset-right));
     left: auto;
-    top: auto;
-    bottom: max(12px, env(safe-area-inset-bottom));
+    top: calc(max(12px, env(safe-area-inset-top)) + 76px);
+    bottom: auto;
     transform: none;
     width: 38vw;
     max-width: 150px;
@@ -557,10 +556,14 @@ body {
   .xp-row { font-size: 9px; margin-bottom: 3px; }
 
   .stats-wrap, .streak-wrap {
-    bottom: max(6px, env(safe-area-inset-bottom));
+    top: calc(max(6px, env(safe-area-inset-top)) + 56px);
+    bottom: auto;
     padding: 6px 9px;
   }
 
-  .streak-number { font-size: 26px; }
+  .streak-number { font-size: 26px; margin: 1px 0 4px; }
+  .streak-bar { height: 6px; }
+  .streak-tier { margin-top: 3px; min-height: 9px; font-size: 8px; }
+  .stat-row { padding: 2px 0; }
   .levelup-banner { top: 28%; font-size: 36px; }
 }

@@ -46,6 +46,7 @@ export interface SceneRefs {
   hemiLight: HemisphericLight;
   onPress: Observable<void>;
   onRelease: Observable<void>;
+  onPressCancel: Observable<void>;
   setButtonHeld: (held: boolean) => void;
   getButtonWorldPos: () => Vector3;
   applyVisualLevel: (level: number) => void;
@@ -534,23 +535,104 @@ export function createScene(canvas: HTMLCanvasElement): SceneRefs {
   // A press starts when the pointer goes down on buttonTop. A release fires
   // when the pointer is released anywhere — even if the pointer drifted off
   // the cap during the hold.
+  // Press/release + drag-to-rotate + pinch-to-zoom + wheel zoom.
+  // - Single pointer down on the cap → press
+  // - Single pointer down off the cap → drag rotates the camera
+  // - Second pointer down (while one is active) → pinch zoom; any in-flight
+  //   press is cancelled (no click commits) via onPressCancel
   const onPress = new Observable<void>();
   const onRelease = new Observable<void>();
+  const onPressCancel = new Observable<void>();
   let pointerPressing = false;
+
+  type Pt = { x: number; y: number };
+  const activePointers = new Map<number, Pt>();
+  type DragMode = "none" | "rotate" | "pinch";
+  let dragMode: DragMode = "none";
+  let dragStart = { x: 0, y: 0, alpha: 0, beta: 0, pinchDist: 0, radius: 0 };
+
+  const ROT_SENS = 0.0055;
+  const RADIUS_MIN = 4.0;
+  const RADIUS_MAX = 13.0;
+  const BETA_MIN = 0.2;
+  const BETA_MAX = Math.PI - 0.2;
+
+  const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+
   scene.onPointerObservable.add((info) => {
+    const pe = info.event as PointerEvent;
     if (info.type === PointerEventTypes.POINTERDOWN) {
+      activePointers.set(pe.pointerId, { x: pe.clientX, y: pe.clientY });
+
+      if (activePointers.size === 2) {
+        // Second touch → pinch zoom. Cancel any in-flight press so it doesn't
+        // commit a click when the fingers leave.
+        if (pointerPressing) {
+          pointerPressing = false;
+          onPressCancel.notifyObservers();
+        }
+        const pts = Array.from(activePointers.values());
+        dragMode = "pinch";
+        dragStart.pinchDist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y) || 1;
+        dragStart.radius = cameraBaseRadius;
+        // User takes manual control — kill any in-flight cycleCameraAngle tween
+        cameraMove = null;
+        return;
+      }
+
       const pick = info.pickInfo;
       if (pick?.hit && pick.pickedMesh === buttonTop) {
         pointerPressing = true;
         onPress.notifyObservers();
+        return;
+      }
+
+      // Off-cap single-touch → drag rotate
+      dragMode = "rotate";
+      dragStart.x = pe.clientX;
+      dragStart.y = pe.clientY;
+      dragStart.alpha = cameraBaseAlpha;
+      dragStart.beta = cameraBaseBeta;
+      cameraMove = null;
+    } else if (info.type === PointerEventTypes.POINTERMOVE) {
+      if (!activePointers.has(pe.pointerId)) return;
+      activePointers.set(pe.pointerId, { x: pe.clientX, y: pe.clientY });
+
+      if (dragMode === "rotate") {
+        const dx = pe.clientX - dragStart.x;
+        const dy = pe.clientY - dragStart.y;
+        cameraBaseAlpha = dragStart.alpha - dx * ROT_SENS;
+        cameraBaseBeta = clamp(dragStart.beta - dy * ROT_SENS, BETA_MIN, BETA_MAX);
+      } else if (dragMode === "pinch" && activePointers.size >= 2) {
+        const pts = Array.from(activePointers.values());
+        const d = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y) || 1;
+        // Fingers moving apart → zoom in (smaller radius); closing → zoom out
+        cameraBaseRadius = clamp(dragStart.radius * (dragStart.pinchDist / d), RADIUS_MIN, RADIUS_MAX);
       }
     } else if (info.type === PointerEventTypes.POINTERUP) {
+      activePointers.delete(pe.pointerId);
+
       if (pointerPressing) {
         pointerPressing = false;
         onRelease.notifyObservers();
       }
+
+      if (activePointers.size === 0) {
+        dragMode = "none";
+      } else if (activePointers.size === 1 && dragMode === "pinch") {
+        // Pinch ends — don't morph into a rotate mid-gesture, just stop.
+        dragMode = "none";
+      }
     }
   });
+
+  // Wheel zoom (desktop)
+  canvas.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    const delta = e.deltaY * 0.006;
+    cameraBaseRadius = clamp(cameraBaseRadius + delta, RADIUS_MIN, RADIUS_MAX);
+    cameraMove = null;
+  }, { passive: false });
 
   // === Dome held-state animation ===
   // Hold = dome dives down and stays there. Release = dome eases back up.
@@ -735,6 +817,7 @@ export function createScene(canvas: HTMLCanvasElement): SceneRefs {
     hemiLight: hemi,
     onPress,
     onRelease,
+    onPressCancel,
     setButtonHeld,
     getButtonWorldPos,
     applyVisualLevel,

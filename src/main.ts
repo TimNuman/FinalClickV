@@ -128,6 +128,12 @@ refs.onPress.add(() => {
 refs.onRelease.add(() => {
   commitRelease();
 });
+// Pinch start during a hold — drop the press silently, no click commits
+refs.onPressCancel.add(() => {
+  if (!holding) return;
+  holding = false;
+  refs.setButtonHeld(false);
+});
 
 window.addEventListener("keydown", (e) => {
   if (e.code !== "Space" || e.repeat) return;

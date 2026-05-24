@@ -510,7 +510,14 @@ export function createScene(canvas: HTMLCanvasElement): SceneRefs {
     };
   };
 
+  // Reasonable zoom range. Lower = closer, higher = farther.
+  // 7.0–8.0 keeps the button comfortably framed without ever feeling cramped.
+  const CAMERA_RADIUS_MIN = 7.0;
+  const CAMERA_RADIUS_MAX = 8.0;
+
   const cycleCameraAngle = (duration = 1.4) => {
+    // Pick a different angle preset than last time (alpha/beta come from the
+    // preset; we override radius so leveling up never trends toward "more zoom")
     let idx = lastCameraAngleIdx;
     if (CAMERA_PRESETS.length > 1) {
       while (idx === lastCameraAngleIdx) {
@@ -519,7 +526,15 @@ export function createScene(canvas: HTMLCanvasElement): SceneRefs {
     }
     lastCameraAngleIdx = idx;
     const a = CAMERA_PRESETS[idx];
-    moveCamera(a.alpha, a.beta, a.radius, duration);
+
+    // Independent random zoom, biased to differ noticeably from the current
+    // radius so the player feels each level-up shifts the framing.
+    let radius = CAMERA_RADIUS_MIN + Math.random() * (CAMERA_RADIUS_MAX - CAMERA_RADIUS_MIN);
+    for (let i = 0; i < 4 && Math.abs(radius - cameraBaseRadius) < 0.35; i++) {
+      radius = CAMERA_RADIUS_MIN + Math.random() * (CAMERA_RADIUS_MAX - CAMERA_RADIUS_MIN);
+    }
+
+    moveCamera(a.alpha, a.beta, radius, duration);
   };
 
   // === applyVisualLevel: maps level → all visual properties ===

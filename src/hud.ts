@@ -14,6 +14,8 @@ export class HUD {
   private bestStreakText = document.getElementById("bestStreakText") as HTMLElement;
   private clicksText = document.getElementById("clicksText") as HTMLElement;
   private critText = document.getElementById("critText") as HTMLElement;
+  private recoveryFill = document.getElementById("recoveryFill") as HTMLElement;
+  private recoveryLabel = document.getElementById("recoveryLabel") as HTMLElement;
   private hud = document.getElementById("hud") as HTMLElement;
 
   private displayedScore = 0;
@@ -67,6 +69,16 @@ export class HUD {
 
     this.hitLayer.appendChild(el);
     setTimeout(() => el.remove(), 1200);
+  }
+
+  // progress: 0 just after click → 1 ready to click again
+  setRecovery(progress: number) {
+    const pct = Math.max(0, Math.min(1, progress)) * 100;
+    this.recoveryFill.style.width = `${pct}%`;
+    const ready = progress >= 1;
+    this.recoveryFill.classList.toggle("ready", ready);
+    this.recoveryLabel.classList.toggle("ready", ready);
+    this.recoveryLabel.textContent = ready ? "READY" : "CHARGING";
   }
 
   pulseStreak() {

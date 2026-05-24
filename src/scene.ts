@@ -44,7 +44,7 @@ export interface SceneRefs {
   fillLight: PointLight;
   hemiLight: HemisphericLight;
   onClick: Observable<void>;
-  pressButton: () => void;
+  pressButton: (onBottom?: () => void) => void;
   getButtonWorldPos: () => Vector3;
   applyVisualLevel: (level: number) => void;
   intensity: () => number;
@@ -473,9 +473,16 @@ export function createScene(canvas: HTMLCanvasElement): SceneRefs {
     }
   });
 
-  // === Press animation: dome dips down then springs back ===
+  // === Press animation: dome dips down deeply then springs back ===
+  // Frame 0   →   8  (133ms): dome drives down
+  // Frame 8   →  28  (333ms): dome eases back up
+  // Press callback fires at frame 8 (bottom of press) — gameplay effects line
+  // up with the visual impact instead of leading it.
   let pressActive = false;
-  const pressButton = () => {
+  const PRESS_DEPTH = 0.14;
+  const PRESS_DOWN_FRAMES = 8;
+  const PRESS_TOTAL_FRAMES = 28;
+  const pressButton = (onBottom?: () => void) => {
     pressActive = true;
     const anim = new Animation(
       "press",
@@ -486,11 +493,15 @@ export function createScene(canvas: HTMLCanvasElement): SceneRefs {
     );
     anim.setKeys([
       { frame: 0, value: topGroup.position.y },
-      { frame: 3, value: baseTopY - 0.06 },
-      { frame: 14, value: baseTopY },
+      { frame: PRESS_DOWN_FRAMES, value: baseTopY - PRESS_DEPTH },
+      { frame: PRESS_TOTAL_FRAMES, value: baseTopY },
     ]);
     topGroup.animations = [anim];
-    scene.beginAnimation(topGroup, 0, 14, false, 1, () => {
+    if (onBottom) {
+      // Bottom-of-press lines up with the down-phase end at 60 fps
+      window.setTimeout(onBottom, (PRESS_DOWN_FRAMES / 60) * 1000);
+    }
+    scene.beginAnimation(topGroup, 0, PRESS_TOTAL_FRAMES, false, 1, () => {
       pressActive = false;
     });
   };

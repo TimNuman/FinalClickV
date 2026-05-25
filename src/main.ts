@@ -3,6 +3,7 @@ import { ELEMENT_BUMP_STEP, GameState, LEVEL_UP_CHANCE_BOOST } from "./state";
 import { VFX } from "./vfx";
 import { HUD } from "./hud";
 import { isEditModeRequested, mountEditPanel } from "./editmode";
+import { AudioSystem } from "./audio";
 
 const canvas = document.getElementById("renderCanvas") as HTMLCanvasElement;
 const hudRoot = document.getElementById("hud") as HTMLElement;
@@ -56,10 +57,20 @@ const vfx = new VFX({
 const startScreen = document.getElementById("startScreen") as HTMLElement;
 const startButton = document.getElementById("startButton") as HTMLButtonElement;
 let gameStarted = false;
+// AudioContext can only be created after a user gesture (browser autoplay
+// policy), so we lazily build it the moment Start is clicked.
+let audio: AudioSystem | null = null;
 
 function beginGame() {
   if (gameStarted) return;
   gameStarted = true;
+  try {
+    audio = new AudioSystem();
+    audio.playStartButton();
+  } catch (e) {
+    // Web Audio unavailable — gameplay still works, just silent.
+    console.warn("audio init failed", e);
+  }
   startScreen.classList.add("hidden");
 }
 startButton.addEventListener("click", beginGame);
@@ -103,6 +114,8 @@ function commitRelease() {
   const result = state.click();
   const intensity = refs.intensity();
 
+  audio?.playHit(result.category, result.isCrit);
+
   // Sync elemental scene state to gameplay state (skipped in edit mode so the
   // tweak sliders aren't overridden by the click that just happened). Also
   // surface a "+X% FIRE" badge per element bumped, stacked above the click.
@@ -113,6 +126,7 @@ function commitRelease() {
       else if (el === "magic") refs.setMagicLevel(state.magicLevel);
     }
     hud.showElementBump(el, ELEMENT_BUMP_STEP * 100, pressX, pressY, i);
+    audio?.playElement(el);
   });
 
   vfx.triggerHit(result);
@@ -133,6 +147,7 @@ function commitRelease() {
     refs.cycleCameraAngle(1.4);
     const newIntensity = refs.intensity();
     hud.showLevelUp(result.newLevel, newIntensity, result.levelUpElement, LEVEL_UP_CHANCE_BOOST * 100);
+    audio?.playLevelUp();
     cameraShake(0.08 + newIntensity * 0.5, 0.4 + newIntensity * 0.5);
     if (newIntensity > 0.25) {
       vfx.triggerHit({ ...result, category: "legendary" });

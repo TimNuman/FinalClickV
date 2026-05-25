@@ -2,6 +2,7 @@ import { createScene } from "./scene";
 import { GameState } from "./state";
 import { VFX } from "./vfx";
 import { HUD } from "./hud";
+import { isEditModeRequested, mountEditPanel } from "./editmode";
 
 const canvas = document.getElementById("renderCanvas") as HTMLCanvasElement;
 const hudRoot = document.getElementById("hud") as HTMLElement;
@@ -10,6 +11,9 @@ const refs = createScene(canvas);
 const state = new GameState();
 const hud = new HUD();
 hud.refresh(state);
+
+const editMode = isEditModeRequested();
+if (editMode) mountEditPanel(refs);
 
 // === Camera shake ===
 let shakeIntensity = 0;
@@ -111,7 +115,9 @@ function commitRelease() {
   }
 
   if (result.leveledUp) {
-    refs.applyVisualLevel(state.level);
+    // In edit mode the sliders own the visual params — don't snap them back
+    // to level-derived defaults on every level-up.
+    if (!editMode) refs.applyVisualLevel(state.level);
     refs.cycleCameraAngle(1.4);
     const newIntensity = refs.intensity();
     hud.showLevelUp(result.newLevel, newIntensity);

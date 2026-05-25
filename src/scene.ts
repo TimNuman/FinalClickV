@@ -44,6 +44,12 @@ export interface SceneRefs {
   pipeline: DefaultRenderingPipeline;
   fillLight: PointLight;
   hemiLight: HemisphericLight;
+  keyLight: DirectionalLight;
+  sun: Mesh;
+  lensFlareSystem: LensFlareSystem;
+  grassMaterial: ShaderMaterial;
+  rockMaterial: ShaderMaterial;
+  mountainMaterial: ShaderMaterial;
   onPress: Observable<void>;
   onRelease: Observable<void>;
   onPressCancel: Observable<void>;
@@ -833,6 +839,12 @@ export function createScene(canvas: HTMLCanvasElement): SceneRefs {
     pipeline,
     fillLight,
     hemiLight: hemi,
+    keyLight,
+    sun,
+    lensFlareSystem,
+    grassMaterial: grass.material,
+    rockMaterial: rockMat,
+    mountainMaterial: mountainMat,
     onPress,
     onRelease,
     onPressCancel,

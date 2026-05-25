@@ -43,6 +43,93 @@ body {
   z-index: 10;
 }
 
+/* ===== EDIT MODE PANEL (?editMode in URL) ===== */
+#editPanel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 320px;
+  z-index: 1000;
+  background: rgba(8, 10, 16, 0.92);
+  color: #f1f5f9;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 11px;
+  overflow-y: auto;
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: -8px 0 24px rgba(0, 0, 0, 0.6);
+}
+#editPanel.collapsed {
+  width: 36px;
+  overflow: hidden;
+}
+#editPanel.collapsed .edit-body {
+  display: none;
+}
+#editPanel.collapsed .edit-header strong {
+  display: none;
+}
+.edit-header {
+  position: sticky;
+  top: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  background: rgba(2, 4, 8, 0.95);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  font-size: 12px;
+  letter-spacing: 1px;
+}
+.edit-header strong {
+  color: #fbbf24;
+}
+#editPanelToggle {
+  width: 22px;
+  height: 22px;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  color: #f1f5f9;
+  cursor: pointer;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1;
+}
+.edit-section {
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.edit-section h3 {
+  margin: 0 0 8px;
+  font-size: 10px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: #94a3b8;
+  font-weight: 700;
+}
+.edit-row {
+  display: grid;
+  grid-template-columns: 1fr 1.4fr 48px;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.edit-row label {
+  font-size: 10px;
+  color: #cbd5e1;
+}
+.edit-row input[type="range"] {
+  width: 100%;
+  accent-color: #fbbf24;
+}
+.edit-value {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: #fde047;
+  font-size: 11px;
+}
+
 /* ===== START SCREEN ===== */
 #startScreen {
   position: fixed;

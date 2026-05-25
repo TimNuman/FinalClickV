@@ -137,16 +137,6 @@ body {
   display: block;
 }
 
-.logo-tagline {
-  margin: 0;
-  font-size: clamp(13px, 1.8vw, 18px);
-  font-weight: 600;
-  letter-spacing: 3px;
-  text-transform: uppercase;
-  color: rgba(253, 230, 138, 0.85);
-  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.6), 0 0 18px rgba(251, 191, 36, 0.45);
-}
-
 .start-button {
   margin-top: 12px;
   padding: 18px 64px;
@@ -194,9 +184,6 @@ body {
 @media (max-width: 720px) {
   .logo-stage {
     height: clamp(200px, 30vh, 360px);
-  }
-  .logo-tagline {
-    letter-spacing: 2px;
   }
   .start-button {
     padding: 14px 44px;

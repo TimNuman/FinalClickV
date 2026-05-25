@@ -103,6 +103,16 @@ function commitRelease() {
   const result = state.click();
   const intensity = refs.intensity();
 
+  // Sync elemental scene state to gameplay state (skipped in edit mode so the
+  // tweak sliders aren't overridden by the click that just happened).
+  if (!editMode && result.elementsTriggered.length > 0) {
+    for (const el of result.elementsTriggered) {
+      if (el === "fire") refs.setFireLevel(state.fireLevel);
+      else if (el === "lightning") refs.setLightningLevel(state.lightningLevel);
+      else if (el === "magic") refs.setMagicLevel(state.magicLevel);
+    }
+  }
+
   vfx.triggerHit(result);
   vfx.setStreakTier(state.streakTier);
 

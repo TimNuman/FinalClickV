@@ -6,6 +6,8 @@ export type HitCategory =
   | "perfect"
   | "legendary";
 
+export type Element = "fire" | "lightning" | "magic";
+
 export interface HitResult {
   category: HitCategory;
   label: string;
@@ -20,6 +22,12 @@ export interface HitResult {
   isCrit: boolean;
   leveledUp: boolean;
   newLevel: number;
+  // Elements that ticked up on this click (a hit can bump zero, one, or
+  // multiple — each rolls independently). Visual sync happens in main.ts.
+  elementsTriggered: Element[];
+  // On a level-up, one of the three elements gets its per-hit bump chance
+  // increased. null on non-level-up clicks.
+  levelUpElement: Element | null;
 }
 
 const RANK_TITLES = [
@@ -59,6 +67,17 @@ export class GameState {
   // streak meter fills 0..1; resets to 0 each time the bar fills (tier up)
   streakMeter = 0;
   streakTier = 0; // 0..5
+
+  // Elemental progression — each hit has a small chance to bump one of these
+  // up by ELEMENT_BUMP_STEP (capped at 1). Each level-up picks one element at
+  // random and boosts ITS bump chance, so the player's fire/lightning/magic
+  // flavour drifts uniquely over a run.
+  fireLevel = 0;
+  lightningLevel = 0;
+  magicLevel = 0;
+  fireBumpChance = 0.003;
+  lightningBumpChance = 0.003;
+  magicBumpChance = 0.003;
 
   // Recovery: after a click the player can't click again until the recovery
   // window has elapsed. Duration shrinks gracefully with level.
@@ -178,12 +197,49 @@ export class GameState {
 
     let leveledUp = false;
     let newLevel = this.level;
+    let levelUpElement: Element | null = null;
     while (this.xp >= this.xpForNext) {
       this.xp -= this.xpForNext;
       this.level += 1;
       this.xpForNext = Math.round(100 * Math.pow(1.18, this.level - 1));
       leveledUp = true;
       newLevel = this.level;
+      // Each level-up picks one element at random and boosts its bump chance.
+      // The boost stacks across levels, so the most-rolled element snowballs.
+      levelUpElement = boostRandomElement(this);
+    }
+
+    // Per-hit element bumps. Only non-misses roll; crits get a second chance.
+    const elementsTriggered: Element[] = [];
+    if (category !== "miss") {
+      const rollCount = isCrit ? 2 : 1;
+      if (this.fireLevel < 1) {
+        for (let i = 0; i < rollCount; i++) {
+          if (Math.random() < this.fireBumpChance) {
+            this.fireLevel = Math.min(1, this.fireLevel + ELEMENT_BUMP_STEP);
+            elementsTriggered.push("fire");
+            break;
+          }
+        }
+      }
+      if (this.lightningLevel < 1) {
+        for (let i = 0; i < rollCount; i++) {
+          if (Math.random() < this.lightningBumpChance) {
+            this.lightningLevel = Math.min(1, this.lightningLevel + ELEMENT_BUMP_STEP);
+            elementsTriggered.push("lightning");
+            break;
+          }
+        }
+      }
+      if (this.magicLevel < 1) {
+        for (let i = 0; i < rollCount; i++) {
+          if (Math.random() < this.magicBumpChance) {
+            this.magicLevel = Math.min(1, this.magicLevel + ELEMENT_BUMP_STEP);
+            elementsTriggered.push("magic");
+            break;
+          }
+        }
+      }
     }
 
     // Slight rotation jitter for floating text
@@ -203,6 +259,30 @@ export class GameState {
       isCrit,
       leveledUp,
       newLevel,
+      elementsTriggered,
+      levelUpElement,
     };
+  }
+}
+
+// Each successful per-hit roll moves the element's visual level up by this much.
+// Capped at 1.0, so ~45 successes (per element) fully maxes it.
+const ELEMENT_BUMP_STEP = 0.022;
+// Per level-up, the chosen element's per-hit chance grows by this much.
+const LEVEL_UP_CHANCE_BOOST = 0.012;
+// Hard ceiling on per-hit chance so the late game doesn't trigger every click.
+const MAX_BUMP_CHANCE = 0.30;
+
+function boostRandomElement(state: GameState): Element {
+  const r = Math.random();
+  if (r < 1 / 3) {
+    state.fireBumpChance = Math.min(MAX_BUMP_CHANCE, state.fireBumpChance + LEVEL_UP_CHANCE_BOOST);
+    return "fire";
+  } else if (r < 2 / 3) {
+    state.lightningBumpChance = Math.min(MAX_BUMP_CHANCE, state.lightningBumpChance + LEVEL_UP_CHANCE_BOOST);
+    return "lightning";
+  } else {
+    state.magicBumpChance = Math.min(MAX_BUMP_CHANCE, state.magicBumpChance + LEVEL_UP_CHANCE_BOOST);
+    return "magic";
   }
 }

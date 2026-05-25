@@ -176,10 +176,25 @@ creditsClose?.addEventListener("click", (e) => {
   e.stopPropagation();
   closeCredits();
 });
-// Esc dismisses; auto-close when the roll finishes
+// Esc handling: credits open → close; game running → back to start menu
 window.addEventListener("keydown", (e) => {
-  if (creditsOpen && e.code === "Escape") closeCredits();
+  if (e.code !== "Escape") return;
+  if (creditsOpen) {
+    closeCredits();
+  } else if (gameStarted) {
+    returnToMenu();
+  }
 });
+
+const returnToMenu = () => {
+  gameStarted = false;
+  // Cancel any in-flight press so commitRelease doesn't fire on resume
+  if (holding) {
+    holding = false;
+    refs.setButtonHeld(false);
+  }
+  startScreen.classList.remove("hidden");
+};
 creditsRoll?.addEventListener("animationend", () => {
   if (creditsOpen) closeCredits();
 });

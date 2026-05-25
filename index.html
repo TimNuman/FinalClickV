@@ -100,6 +100,13 @@
       <div id="flashOverlay"></div>
     </div>
 
+    <!-- Menu button (top-left) — hidden until the game is actually running. -->
+    <button id="menuButton" class="menu-button hidden" type="button" aria-label="Return to menu">
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M3 6 L21 6 M3 12 L21 12 M3 18 L21 18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+      </svg>
+    </button>
+
     <!-- Mute toggle (lower-right, above safe-area) — siblings of #hud so it
          keeps pointer-events without inheriting hud's pointer-events:none -->
     <button id="muteButton" class="mute-button" type="button" aria-label="Mute audio">

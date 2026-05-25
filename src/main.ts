@@ -64,8 +64,11 @@ let gameStarted = false;
 // then attached to its musicGain so the mute button controls everything.
 const bgm = document.getElementById("bgmAudio") as HTMLAudioElement | null;
 const muteButton = document.getElementById("muteButton") as HTMLButtonElement | null;
+const menuButton = document.getElementById("menuButton") as HTMLButtonElement | null;
 let audio: AudioSystem | null = null;
 let muted = false;
+
+const showMenuButton = (show: boolean) => menuButton?.classList.toggle("hidden", !show);
 
 if (bgm) bgm.loop = true; // belt-and-braces: also set via JS in case the HTML attr is ever removed
 const tryPlayMusic = () => {
@@ -123,6 +126,7 @@ function beginGame() {
   gameStarted = true;
   ensureAudioSystem()?.playStartButton();
   startScreen.classList.add("hidden");
+  showMenuButton(true);
 }
 
 // === Credits screen ===
@@ -139,6 +143,7 @@ const openCredits = () => {
   startScreen.classList.add("hidden");
   creditsScreen.classList.remove("hidden");
   creditsScreen.setAttribute("aria-hidden", "false");
+  showMenuButton(false);
   // Swap music: pause main bgm, start credits track from the top
   if (bgm) { bgm.pause(); }
   if (creditsAudio) {
@@ -166,6 +171,7 @@ const closeCredits = () => {
   if (bgm) { bgm.muted = muted; void bgm.play().catch(() => { /* ignore */ }); }
   // Return to the start screen if the game hasn't actually begun yet
   if (!gameStarted) startScreen.classList.remove("hidden");
+  else showMenuButton(true);
 };
 
 creditsButton?.addEventListener("click", (e) => {
@@ -194,7 +200,12 @@ const returnToMenu = () => {
     refs.setButtonHeld(false);
   }
   startScreen.classList.remove("hidden");
+  showMenuButton(false);
 };
+menuButton?.addEventListener("click", (e) => {
+  e.stopPropagation();
+  returnToMenu();
+});
 creditsRoll?.addEventListener("animationend", () => {
   if (creditsOpen) closeCredits();
 });

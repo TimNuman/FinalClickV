@@ -15,8 +15,10 @@ export class AudioSystem {
   private master: GainNode;
   private dryBus: GainNode;
   private wetBus: GainNode;
+  private musicGain: GainNode;
   private muted = false;
   private baseGain = 0.6;
+  private baseMusicGain = 0.35;
 
   constructor() {
     const AC =
@@ -57,11 +59,41 @@ export class AudioSystem {
     this.wetBus = this.ctx.createGain();
     this.wetBus.gain.value = 0.55;
     this.wetBus.connect(conv);
+
+    // Music bus — separate from SFX so the SFX compressor doesn't duck the
+    // music every time the player clicks, but the mute toggle catches both.
+    this.musicGain = this.ctx.createGain();
+    this.musicGain.gain.value = this.baseMusicGain;
+    this.musicGain.connect(this.ctx.destination);
+  }
+
+  // Route an <audio> element through the musicGain so its volume + mute are
+  // controlled centrally. The returned source can be retained if needed; the
+  // <audio> element itself owns play/pause/loop. Returns null on failure
+  // (e.g. cross-origin or already-attached element).
+  attachMusic(audioEl: HTMLAudioElement): MediaElementAudioSourceNode | null {
+    try {
+      const src = this.ctx.createMediaElementSource(audioEl);
+      src.connect(this.musicGain);
+      return src;
+    } catch (e) {
+      console.warn("attachMusic failed", e);
+      return null;
+    }
+  }
+
+  setMusicVolume(v: number): void {
+    this.baseMusicGain = Math.max(0, Math.min(1, v));
+    if (!this.muted) {
+      this.musicGain.gain.setTargetAtTime(this.baseMusicGain, this.ctx.currentTime, 0.02);
+    }
   }
 
   setMuted(m: boolean) {
     this.muted = m;
-    this.master.gain.setTargetAtTime(m ? 0 : this.baseGain, this.ctx.currentTime, 0.02);
+    const t = this.ctx.currentTime;
+    this.master.gain.setTargetAtTime(m ? 0 : this.baseGain, t, 0.02);
+    this.musicGain.gain.setTargetAtTime(m ? 0 : this.baseMusicGain, t, 0.02);
   }
   isMuted(): boolean { return this.muted; }
   resume(): void { if (this.ctx.state === "suspended") void this.ctx.resume(); }

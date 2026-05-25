@@ -16,6 +16,10 @@
   <body>
     <canvas id="renderCanvas" touch-action="none"></canvas>
 
+    <!-- Background music. File lives in the repo root next to index.html;
+         Vite's `base: '/FinalClickV/'` prepends the deploy prefix at build. -->
+    <audio id="bgmAudio" src="Mythic Ironlight.mp3" preload="auto" loop></audio>
+
     <!-- HUD overlay -->
     <div id="hud">
       <!-- Top bar: level + XP -->

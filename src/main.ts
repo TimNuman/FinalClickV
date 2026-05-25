@@ -67,6 +67,11 @@ function beginGame() {
   try {
     audio = new AudioSystem();
     audio.playStartButton();
+    const bgm = document.getElementById("bgmAudio") as HTMLAudioElement | null;
+    if (bgm) {
+      audio.attachMusic(bgm);
+      void bgm.play().catch((e) => console.warn("bgm autoplay blocked", e));
+    }
   } catch (e) {
     // Web Audio unavailable — gameplay still works, just silent.
     console.warn("audio init failed", e);

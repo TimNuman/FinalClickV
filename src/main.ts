@@ -199,6 +199,8 @@ const returnToMenu = () => {
     holding = false;
     refs.setButtonHeld(false);
   }
+  // Game has been started at least once → relabel the button
+  startButton.textContent = "RESUME";
   startScreen.classList.remove("hidden");
   showMenuButton(false);
 };

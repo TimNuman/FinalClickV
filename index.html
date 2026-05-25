@@ -44,15 +44,8 @@
           <div class="streak-fill" id="streakFill"></div>
         </div>
         <div class="streak-tier" id="streakTier">—</div>
-      </div>
-
-      <!-- Stats (left) -->
-      <div class="stats-wrap">
-        <div class="stat-row"><span>Score</span><span id="scoreText">0</span></div>
-        <div class="stat-row"><span>Best Streak</span><span id="bestStreakText">0</span></div>
-        <div class="stat-row"><span>Clicks</span><span id="clicksText">0</span></div>
-        <div class="stat-row"><span>Crit Chance</span><span id="critText">5%</span></div>
-        <div class="stat-row stat-elements">
+        <!-- Floating element-chance row below the streak panel (no own background) -->
+        <div class="streak-elements">
           <span class="elem-cell fire" title="Fire chance per hit">
             <svg class="elem-icon" viewBox="0 0 16 16" aria-hidden="true">
               <path d="M8 1 C 10 4 12 6 11 9 C 13 7 13 10 12 13 C 11 14.5 9.5 15 8 15 C 5 15 3 13 3 10 C 3 8 5 7 6 6 C 6 4 7 2.5 8 1 Z" fill="currentColor"/>
@@ -72,6 +65,14 @@
             <span id="magicChanceText">0.3%</span>
           </span>
         </div>
+      </div>
+
+      <!-- Stats (left) -->
+      <div class="stats-wrap">
+        <div class="stat-row"><span>Score</span><span id="scoreText">0</span></div>
+        <div class="stat-row"><span>Best Streak</span><span id="bestStreakText">0</span></div>
+        <div class="stat-row"><span>Clicks</span><span id="clicksText">0</span></div>
+        <div class="stat-row"><span>Crit Chance</span><span id="critText">5%</span></div>
       </div>
 
       <!-- Recovery bar (bottom center) -->

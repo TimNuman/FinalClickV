@@ -495,13 +495,16 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-/* Elements row — three colour-coded icon + percentage cells in one stat row */
-.stat-row.stat-elements {
+/* Floating element-chance row beneath the streak panel — no own background */
+.streak-elements {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin-top: 10px;
   display: flex;
   justify-content: space-between;
-  gap: 6px;
-  padding: 8px 0 4px;
-  border-bottom: none;
+  padding: 0 6px;
 }
 .elem-cell {
   display: flex;
@@ -511,14 +514,14 @@ body {
   font-weight: 800;
   letter-spacing: 0.5px;
   font-variant-numeric: tabular-nums;
-  text-shadow: 0 0 8px currentColor, 0 1px 2px rgba(0, 0, 0, 0.6);
+  text-shadow: 0 0 10px currentColor, 0 1px 3px rgba(0, 0, 0, 0.75);
 }
 .elem-cell .elem-icon {
   width: 13px;
   height: 13px;
   filter: drop-shadow(0 0 4px currentColor);
 }
-.elem-cell.fire      { color: #fb923c; }
+.elem-cell.fire      { color: #ef4444; }
 .elem-cell.lightning { color: #67e8f9; }
 .elem-cell.magic     { color: #c084fc; }
 
@@ -648,7 +651,7 @@ body {
   -webkit-text-stroke: 0.5px rgba(0, 0, 0, 0.6);
   animation: elementBumpFloat 1.4s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
-.element-bump.fire      { color: #fb923c; }
+.element-bump.fire      { color: #ef4444; }
 .element-bump.lightning { color: #67e8f9; }
 .element-bump.magic     { color: #c084fc; }
 
@@ -779,7 +782,7 @@ body {
   letter-spacing: 5px;
   -webkit-text-stroke: 0;
 }
-.levelup-banner .sub.element.fire     { color: #fb923c; text-shadow: 0 0 16px rgba(251, 146, 60, 0.9), 0 2px 6px rgba(0,0,0,0.7); }
+.levelup-banner .sub.element.fire     { color: #ef4444; text-shadow: 0 0 16px rgba(239, 68, 68, 0.9), 0 2px 6px rgba(0,0,0,0.7); }
 .levelup-banner .sub.element.lightning{ color: #67e8f9; text-shadow: 0 0 16px rgba(103, 232, 249, 0.9), 0 2px 6px rgba(0,0,0,0.7); }
 .levelup-banner .sub.element.magic    { color: #c084fc; text-shadow: 0 0 16px rgba(192, 132, 252, 0.9), 0 2px 6px rgba(0,0,0,0.7); }
 

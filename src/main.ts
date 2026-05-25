@@ -143,6 +143,7 @@ const openCredits = () => {
   startScreen.classList.add("hidden");
   creditsScreen.classList.remove("hidden");
   creditsScreen.setAttribute("aria-hidden", "false");
+  document.body.classList.add("credits-open");
   showMenuButton(false);
   // Swap music: pause main bgm, start credits track from the top
   if (bgm) { bgm.pause(); }
@@ -166,6 +167,7 @@ const closeCredits = () => {
   creditsOpen = false;
   creditsScreen.classList.add("hidden");
   creditsScreen.setAttribute("aria-hidden", "true");
+  document.body.classList.remove("credits-open");
   refs.setFlyOverMode(false);
   if (creditsAudio) { creditsAudio.pause(); }
   if (bgm) { bgm.muted = muted; void bgm.play().catch(() => { /* ignore */ }); }

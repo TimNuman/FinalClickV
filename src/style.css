@@ -42,6 +42,9 @@ body {
   pointer-events: none;
   z-index: 10;
 }
+/* Hide the in-game HUD while credits are rolling — only the mute button and
+   the credits' own close button stay visible. */
+body.credits-open #hud { display: none; }
 
 /* ===== EDIT MODE PANEL (?editMode in URL) ===== */
 #editPanel {

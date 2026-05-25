@@ -14,6 +14,9 @@ export class HUD {
   private bestStreakText = document.getElementById("bestStreakText") as HTMLElement;
   private clicksText = document.getElementById("clicksText") as HTMLElement;
   private critText = document.getElementById("critText") as HTMLElement;
+  private fireChanceText = document.getElementById("fireChanceText") as HTMLElement;
+  private lightningChanceText = document.getElementById("lightningChanceText") as HTMLElement;
+  private magicChanceText = document.getElementById("magicChanceText") as HTMLElement;
   private recoveryFill = document.getElementById("recoveryFill") as HTMLElement;
   private recoveryLabel = document.getElementById("recoveryLabel") as HTMLElement;
   private hud = document.getElementById("hud") as HTMLElement;
@@ -36,6 +39,9 @@ export class HUD {
     this.bestStreakText.textContent = String(state.bestStreak);
     this.clicksText.textContent = String(state.clicks);
     this.critText.textContent = `${Math.round(state.critChance() * 100)}%`;
+    this.fireChanceText.textContent = `${(state.fireBumpChance * 100).toFixed(1)}%`;
+    this.lightningChanceText.textContent = `${(state.lightningBumpChance * 100).toFixed(1)}%`;
+    this.magicChanceText.textContent = `${(state.magicBumpChance * 100).toFixed(1)}%`;
   }
 
   // intensity: 0..1 — drives drama of the floating hit text

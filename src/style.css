@@ -495,6 +495,33 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+/* Elements row — three colour-coded icon + percentage cells in one stat row */
+.stat-row.stat-elements {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 8px 0 4px;
+  border-bottom: none;
+}
+.elem-cell {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 8px currentColor, 0 1px 2px rgba(0, 0, 0, 0.6);
+}
+.elem-cell .elem-icon {
+  width: 13px;
+  height: 13px;
+  filter: drop-shadow(0 0 4px currentColor);
+}
+.elem-cell.fire      { color: #fb923c; }
+.elem-cell.lightning { color: #67e8f9; }
+.elem-cell.magic     { color: #c084fc; }
+
 /* ===== RECOVERY BAR ===== */
 .recovery-wrap {
   position: absolute;

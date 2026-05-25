@@ -130,6 +130,35 @@ body {
   font-size: 11px;
 }
 
+/* ===== MUTE BUTTON ===== */
+.mute-button {
+  position: fixed;
+  right: max(20px, env(safe-area-inset-right));
+  bottom: max(20px, env(safe-area-inset-bottom));
+  z-index: 200;
+  width: 42px;
+  height: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: rgba(10, 12, 20, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 50%;
+  color: #e2e8f0;
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  transition: background 0.15s ease, transform 0.15s ease, color 0.15s ease;
+}
+.mute-button:hover { background: rgba(20, 24, 38, 0.85); transform: translateY(-1px); }
+.mute-button:active { transform: translateY(1px); }
+.mute-button.muted { color: #94a3b8; background: rgba(40, 14, 14, 0.65); }
+.mute-icon { width: 20px; height: 20px; }
+.mute-icon.mute-off { display: none; }
+.mute-button.muted .mute-icon.mute-on { display: none; }
+.mute-button.muted .mute-icon.mute-off { display: block; }
+
 /* ===== START SCREEN ===== */
 #startScreen {
   position: fixed;

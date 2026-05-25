@@ -16,9 +16,10 @@
   <body>
     <canvas id="renderCanvas" touch-action="none"></canvas>
 
-    <!-- Background music. File lives in the repo root next to index.html;
-         Vite's `base: '/FinalClickV/'` prepends the deploy prefix at build. -->
-    <audio id="bgmAudio" src="Mythic Ironlight.mp3" preload="auto" loop></audio>
+    <!-- Background music. Lives under public/ so Vite copies it to dist/.
+         autoplay is best-effort — most browsers block until the user has
+         interacted with the page, so main.ts also retries on first input. -->
+    <audio id="bgmAudio" src="Mythic Ironlight.mp3" preload="auto" loop autoplay></audio>
 
     <!-- HUD overlay -->
     <div id="hud">
@@ -96,6 +97,20 @@
       <!-- Vignette / flash overlay -->
       <div id="flashOverlay"></div>
     </div>
+
+    <!-- Mute toggle (lower-right, above safe-area) — siblings of #hud so it
+         keeps pointer-events without inheriting hud's pointer-events:none -->
+    <button id="muteButton" class="mute-button" type="button" aria-label="Mute audio">
+      <svg class="mute-icon mute-on" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M3 10 L3 14 L7 14 L12 19 L12 5 L7 10 Z" fill="currentColor"/>
+        <path d="M15.5 8.5 Q 18 12 15.5 15.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        <path d="M18 6 Q 22 12 18 18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+      </svg>
+      <svg class="mute-icon mute-off" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M3 10 L3 14 L7 14 L12 19 L12 5 L7 10 Z" fill="currentColor"/>
+        <path d="M16 9 L 22 15 M 22 9 L 16 15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+    </button>
 
     <!-- Start screen — overlays the scene until the player hits Start -->
     <div id="startScreen">

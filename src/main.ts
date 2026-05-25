@@ -58,24 +58,70 @@ const startScreen = document.getElementById("startScreen") as HTMLElement;
 const startButton = document.getElementById("startButton") as HTMLButtonElement;
 let gameStarted = false;
 // AudioContext can only be created after a user gesture (browser autoplay
-// policy), so we lazily build it the moment Start is clicked.
+// policy). Music is a plain HTMLAudioElement that we try to autoplay on load
+// and retry on the first user interaction; the Web-Audio AudioSystem (for
+// SFX) is initialised on that same first interaction and the BGM element is
+// then attached to its musicGain so the mute button controls everything.
+const bgm = document.getElementById("bgmAudio") as HTMLAudioElement | null;
+const muteButton = document.getElementById("muteButton") as HTMLButtonElement | null;
 let audio: AudioSystem | null = null;
+let muted = false;
+
+if (bgm) bgm.loop = true; // belt-and-braces: also set via JS in case the HTML attr is ever removed
+const tryPlayMusic = () => {
+  if (!bgm) return;
+  bgm.muted = muted;
+  void bgm.play().catch(() => { /* blocked — will retry on first input */ });
+};
+
+const ensureAudioSystem = (): AudioSystem | null => {
+  if (audio) return audio;
+  try {
+    audio = new AudioSystem();
+    if (bgm) audio.attachMusic(bgm);
+    audio.setMuted(muted);
+  } catch (e) {
+    console.warn("audio init failed", e);
+  }
+  return audio;
+};
+
+// 1. Best-effort: kick BGM the moment the page loads
+tryPlayMusic();
+
+// 2. First user input anywhere on the page → start music + init AudioSystem
+const onFirstInput = () => {
+  ensureAudioSystem();
+  tryPlayMusic();
+  document.removeEventListener("pointerdown", onFirstInput, true);
+  document.removeEventListener("keydown", onFirstInput, true);
+  document.removeEventListener("touchstart", onFirstInput, true);
+};
+document.addEventListener("pointerdown", onFirstInput, true);
+document.addEventListener("keydown", onFirstInput, true);
+document.addEventListener("touchstart", onFirstInput, true);
+
+// 3. Mute button — toggles both the raw <audio>.muted and the SFX bus
+const refreshMuteUi = () => {
+  muteButton?.classList.toggle("muted", muted);
+  muteButton?.setAttribute("aria-label", muted ? "Unmute audio" : "Mute audio");
+};
+const toggleMute = () => {
+  muted = !muted;
+  if (bgm) bgm.muted = muted;
+  audio?.setMuted(muted);
+  refreshMuteUi();
+};
+muteButton?.addEventListener("click", (e) => {
+  e.stopPropagation();
+  toggleMute();
+});
+refreshMuteUi();
 
 function beginGame() {
   if (gameStarted) return;
   gameStarted = true;
-  try {
-    audio = new AudioSystem();
-    audio.playStartButton();
-    const bgm = document.getElementById("bgmAudio") as HTMLAudioElement | null;
-    if (bgm) {
-      audio.attachMusic(bgm);
-      void bgm.play().catch((e) => console.warn("bgm autoplay blocked", e));
-    }
-  } catch (e) {
-    // Web Audio unavailable — gameplay still works, just silent.
-    console.warn("audio init failed", e);
-  }
+  ensureAudioSystem()?.playStartButton();
   startScreen.classList.add("hidden");
 }
 startButton.addEventListener("click", beginGame);

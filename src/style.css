@@ -495,16 +495,18 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-/* Floating element-chance row beneath the streak panel — no own background */
+/* Floating element-chance row beneath the streak panel — no own background.
+   Extends past the streak panel's width via negative left/right so the three
+   cells get more breathing room than space-between would give at 140px. */
 .streak-elements {
   position: absolute;
   top: 100%;
-  left: 0;
-  right: 0;
+  left: -18px;
+  right: -18px;
   margin-top: 10px;
   display: flex;
   justify-content: space-between;
-  padding: 0 6px;
+  padding: 0 4px;
 }
 .elem-cell {
   display: flex;

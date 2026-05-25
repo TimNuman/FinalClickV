@@ -581,6 +581,55 @@ body {
   box-shadow: 0 0 14px rgba(74, 222, 128, 0.7);
 }
 
+/* ===== SLASH FLASHES =====
+   Diagonal streaks fired on each hit. Sizing is set per-instance via CSS
+   custom properties so the same .slash class scales from a tiny ok streak
+   to a massive legendary blade. */
+#slashLayer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+.slash {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  height: var(--slash-h, 22px);
+  width: var(--slash-w, 1500px);
+  pointer-events: none;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    transparent 6%,
+    rgba(255, 255, 255, 0.0) 15%,
+    rgba(255, 255, 255, 1) 35%,
+    var(--slash-color, rgba(255, 255, 255, 1)) 50%,
+    rgba(255, 255, 255, 1) 65%,
+    rgba(255, 255, 255, 0.0) 85%,
+    transparent 94%,
+    transparent 100%
+  );
+  border-radius: 999px;
+  filter: blur(var(--slash-blur, 2px)) drop-shadow(0 0 var(--slash-glow, 14px) var(--slash-color, #fff));
+  transform: translate(-50%, -50%) rotate(var(--slash-angle, 45deg)) scaleX(0);
+  animation: slashFlash var(--slash-dur, 360ms) cubic-bezier(0.16, 0.84, 0.28, 1) forwards;
+}
+@keyframes slashFlash {
+  0% {
+    transform: translate(-50%, -50%) rotate(var(--slash-angle, 45deg)) scaleX(0);
+    opacity: 0;
+  }
+  16% {
+    transform: translate(-50%, -50%) rotate(var(--slash-angle, 45deg)) scaleX(1.06);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, -50%) rotate(var(--slash-angle, 45deg)) scaleX(1.06);
+    opacity: 0;
+  }
+}
+
 /* ===== HIT TEXT ===== */
 #hitTextLayer {
   position: absolute;

@@ -132,6 +132,7 @@ function commitRelease() {
   vfx.triggerHit(result);
   vfx.setStreakTier(state.streakTier);
 
+  hud.showSlash(result.category);
   hud.showHit(result, pressX, pressY, intensity);
   hud.pulseStreak();
   hud.refresh(state);

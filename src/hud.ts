@@ -1,7 +1,8 @@
-import type { Element, GameState, HitResult } from "./state";
+import type { Element, GameState, HitCategory, HitResult } from "./state";
 
 export class HUD {
   private hitLayer = document.getElementById("hitTextLayer") as HTMLElement;
+  private slashLayer = document.getElementById("slashLayer") as HTMLElement;
   private xpFill = document.getElementById("xpFill") as HTMLElement;
   private xpText = document.getElementById("xpText") as HTMLElement;
   private levelNumber = document.getElementById("levelNumber") as HTMLElement;
@@ -87,6 +88,34 @@ export class HUD {
     this.recoveryLabel.textContent = ready ? "READY" : "CHARGING";
   }
 
+  // Diagonal slash flash overlaid on the scene. Size, glow and number of
+  // stacked layers escalate with the hit category; angle is random within a
+  // diagonal range each call so successive slashes don't look identical.
+  showSlash(category: HitCategory): void {
+    const spec = SLASH_SPECS[category];
+    if (!spec) return;
+    for (let i = 0; i < spec.layers; i++) {
+      const slash = document.createElement("div");
+      slash.className = "slash";
+      // Angle: random magnitude in a diagonal range, random sign, slight
+      // per-layer offset so stacked slashes form an X / fan instead of overlap.
+      const sign = Math.random() < 0.5 ? -1 : 1;
+      const mag = 32 + Math.random() * 28;        // 32°..60°
+      const layerJitter = (i - (spec.layers - 1) / 2) * 14;
+      const angle = sign * mag + layerJitter;
+      slash.style.setProperty("--slash-angle", `${angle.toFixed(1)}deg`);
+      slash.style.setProperty("--slash-w", `${spec.width}px`);
+      slash.style.setProperty("--slash-h", `${spec.height}px`);
+      slash.style.setProperty("--slash-blur", `${spec.blur}px`);
+      slash.style.setProperty("--slash-glow", `${spec.glow}px`);
+      slash.style.setProperty("--slash-color", spec.color);
+      slash.style.setProperty("--slash-dur", `${spec.duration}ms`);
+      slash.style.animationDelay = `${i * 55}ms`;
+      this.slashLayer.appendChild(slash);
+      setTimeout(() => slash.remove(), spec.duration + i * 55 + 80);
+    }
+  }
+
   // Floating "+X% FIRE" badge at the click point — one per element triggered.
   // index lets us stack multiple bumps from the same click vertically.
   showElementBump(element: Element, percentPct: number, screenX: number, screenY: number, index = 0) {
@@ -154,6 +183,24 @@ export class HUD {
     return n.toLocaleString("en-US");
   }
 }
+
+type SlashSpec = {
+  layers: number;
+  width: number;
+  height: number;
+  blur: number;
+  glow: number;
+  color: string;
+  duration: number;
+};
+
+const SLASH_SPECS: Partial<Record<HitCategory, SlashSpec>> = {
+  ok:        { layers: 1, width: 720,  height: 8,  blur: 1.0, glow: 6,  color: "rgba(186, 230, 253, 0.9)", duration: 280 },
+  good:      { layers: 1, width: 1100, height: 14, blur: 1.5, glow: 12, color: "#67e8f9",                  duration: 320 },
+  great:     { layers: 1, width: 1500, height: 22, blur: 2.0, glow: 18, color: "#fb923c",                  duration: 360 },
+  perfect:   { layers: 2, width: 1800, height: 30, blur: 2.5, glow: 22, color: "#f9a8d4",                  duration: 400 },
+  legendary: { layers: 3, width: 2400, height: 46, blur: 3.0, glow: 32, color: "#fde047",                  duration: 460 },
+};
 
 function escapeHtml(s: string): string {
   return s

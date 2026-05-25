@@ -124,6 +124,14 @@ function buildSections(refs: SceneRefs): Section[] {
       ],
     },
     {
+      title: "Elemental",
+      sliders: [
+        { label: "Fire",      min: 0, max: 1, step: 0.01, initial: 0, set: (v) => refs.setFireLevel(v) },
+        { label: "Lightning", min: 0, max: 1, step: 0.01, initial: 0, set: (v) => refs.setLightningLevel(v) },
+        { label: "Magic",     min: 0, max: 1, step: 0.01, initial: 0, set: (v) => refs.setMagicLevel(v) },
+      ],
+    },
+    {
       title: "Game preview",
       sliders: [
         // Drives applyVisualLevel — resets the post-processing sliders above

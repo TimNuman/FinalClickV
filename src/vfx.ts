@@ -456,7 +456,7 @@ export class VFX {
 
 // === Helpers ===
 
-function createLightningBoltMesh(scene: Scene, start: Vector3, end: Vector3): Mesh {
+export function createLightningBoltMesh(scene: Scene, start: Vector3, end: Vector3): Mesh {
   const tex = createLightningTexture(scene);
   const length = Vector3.Distance(start, end);
   const plane = MeshBuilder.CreatePlane("bolt", { width: length, height: 0.45 }, scene);

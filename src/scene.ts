@@ -27,6 +27,7 @@ import {
   VertexBuffer,
   VertexData,
 } from "@babylonjs/core";
+import { createLightningBoltMesh } from "./vfx";
 
 export interface SceneRefs {
   engine: Engine;
@@ -54,6 +55,9 @@ export interface SceneRefs {
   onRelease: Observable<void>;
   onPressCancel: Observable<void>;
   setButtonHeld: (held: boolean) => void;
+  setFireLevel: (v: number) => void;
+  setLightningLevel: (v: number) => void;
+  setMagicLevel: (v: number) => void;
   getButtonWorldPos: () => Vector3;
   applyVisualLevel: (level: number) => void;
   intensity: () => number;
@@ -460,6 +464,140 @@ export function createScene(canvas: HTMLCanvasElement): SceneRefs {
   // Light direction shared with shader materials (matches keyLight)
   const sceneLightDir = keyLight.direction.normalizeToNew();
 
+  // === Fire / Lightning / Magic global effect levels ============================
+  // Each runs 0..1 and stacks. Driven from the edit-mode sliders or external code
+  // via the setFireLevel / setLightningLevel / setMagicLevel APIs.
+  let fireLevel = 0;
+  let lightningLevel = 0;
+  let magicLevel = 0;
+
+  // Capture rocks' resting Y so the magic-float effect can lift them and snap back
+  const rockBaseYs = rocks.map((r) => r.position.y);
+  const topBaseEmissive = (buttonTop.material as StandardMaterial).emissiveColor.clone();
+
+  // Burning-button flame (sits on top of the dome, follows the press animation)
+  const dotTex = createDotTexture(scene, "fireDot");
+  const buttonFire = new ParticleSystem("buttonFire", 120, scene);
+  buttonFire.particleTexture = dotTex;
+  buttonFire.emitter = topGroup as unknown as Vector3;
+  buttonFire.minEmitBox = new Vector3(-0.35, 0.0, -0.35);
+  buttonFire.maxEmitBox = new Vector3(0.35, 0.05, 0.35);
+  buttonFire.color1 = new Color4(1.0, 0.9, 0.3, 1);
+  buttonFire.color2 = new Color4(1.0, 0.35, 0.05, 1);
+  buttonFire.colorDead = new Color4(0.15, 0, 0, 0);
+  buttonFire.minSize = 0.08;
+  buttonFire.maxSize = 0.32;
+  buttonFire.minLifeTime = 0.30;
+  buttonFire.maxLifeTime = 0.75;
+  buttonFire.gravity = new Vector3(0, 4.5, 0);
+  buttonFire.direction1 = new Vector3(-0.4, 1.2, -0.4);
+  buttonFire.direction2 = new Vector3(0.4, 2.2, 0.4);
+  buttonFire.minEmitPower = 0.4;
+  buttonFire.maxEmitPower = 1.4;
+  buttonFire.updateSpeed = 0.015;
+  buttonFire.emitRate = 0;
+  buttonFire.blendMode = ParticleSystem.BLENDMODE_ADD;
+  buttonFire.start();
+
+  // Floating magic runes — billboarded planes around the button, fade in with magic
+  const runeMesh = createGlowRune(scene);
+  const runes: { mesh: Mesh; baseY: number }[] = [];
+  const RUNE_COUNT = 8;
+  for (let i = 0; i < RUNE_COUNT; i++) {
+    const r = runeMesh.clone(`rune${i}`)!;
+    r.isPickable = false;
+    r.billboardMode = Mesh.BILLBOARDMODE_ALL;
+    const angle = (i / RUNE_COUNT) * Math.PI * 2 + Math.random() * 0.4;
+    const dist = 2.2 + Math.random() * 1.2;
+    const y = 0.5 + Math.random() * 1.8;
+    r.position.set(Math.cos(angle) * dist, y, Math.sin(angle) * dist);
+    r.scaling.scaleInPlace(0.8 + Math.random() * 0.5);
+    runes.push({ mesh: r, baseY: y });
+  }
+  runeMesh.dispose(); // we keep the clones; template no longer needed
+
+  // Lightning timers (per-frame stochastic spawning when level > 0)
+  let nextButtonBoltAt = 0;
+  let nextChainBoltAt = 0;
+  let nextSkyFlashAt = 0;
+  const flashOverlayEl = document.getElementById("flashOverlay");
+
+  const fadeBoltOut = (bolt: Mesh, fadeMs: number) => {
+    const start = performance.now();
+    const tick = () => {
+      const mat = bolt.material as StandardMaterial | null;
+      if (!mat) return;
+      const p = (performance.now() - start) / fadeMs;
+      if (p >= 1) {
+        bolt.dispose();
+        (mat.opacityTexture as Texture | null)?.dispose();
+        mat.dispose();
+        return;
+      }
+      mat.alpha = 1 - p;
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  };
+
+  const spawnButtonBolt = () => {
+    const start = topGroup.getAbsolutePosition();
+    const angle = Math.random() * Math.PI * 2;
+    const dist = 1.6 + Math.random() * 2.2;
+    const end = new Vector3(
+      start.x + Math.cos(angle) * dist,
+      start.y + 0.4 + Math.random() * 1.6,
+      start.z + Math.sin(angle) * dist,
+    );
+    fadeBoltOut(createLightningBoltMesh(scene, start, end), 220);
+  };
+
+  const spawnChainBolt = () => {
+    if (rocks.length < 2) return;
+    const a = rocks[Math.floor(Math.random() * rocks.length)];
+    let b = rocks[Math.floor(Math.random() * rocks.length)];
+    let tries = 0;
+    while (b === a && tries++ < 4) b = rocks[Math.floor(Math.random() * rocks.length)];
+    if (a === b) return;
+    const start = a.getAbsolutePosition().clone();
+    start.y += 0.4;
+    const end = b.getAbsolutePosition().clone();
+    end.y += 0.4;
+    fadeBoltOut(createLightningBoltMesh(scene, start, end), 260);
+  };
+
+  const triggerSkyFlash = () => {
+    if (!flashOverlayEl) return;
+    flashOverlayEl.classList.remove("flash");
+    void (flashOverlayEl as HTMLElement).offsetWidth;
+    flashOverlayEl.classList.add("flash");
+  };
+
+  const setFireLevel = (v: number) => {
+    fireLevel = Math.max(0, Math.min(1, v));
+    grass.material.setFloat("fireLevel", fireLevel);
+    rockMat.setFloat("fireLevel", fireLevel);
+    mountainMat.setFloat("fireLevel", fireLevel);
+    // Button dome glows progressively hotter
+    (buttonTop.material as StandardMaterial).emissiveColor = new Color3(
+      topBaseEmissive.r + fireLevel * 0.9,
+      topBaseEmissive.g + fireLevel * 0.15,
+      topBaseEmissive.b + fireLevel * 0.02,
+    );
+    buttonFire.emitRate = fireLevel * 280;
+  };
+
+  const setLightningLevel = (v: number) => {
+    lightningLevel = Math.max(0, Math.min(1, v));
+  };
+
+  const setMagicLevel = (v: number) => {
+    magicLevel = Math.max(0, Math.min(1, v));
+    grass.material.setFloat("magicLevel", magicLevel);
+    rockMat.setFloat("magicLevel", magicLevel);
+    mountainMat.setFloat("magicLevel", magicLevel);
+  };
+
   scene.onBeforeRenderObservable.add(() => {
     const dt = engine.getDeltaTime() / 1000;
     t += dt;
@@ -470,6 +608,46 @@ export function createScene(canvas: HTMLCanvasElement): SceneRefs {
     grass.material.setVector3("cameraPosition", camera.position);
     rockMat.setVector3("cameraPosition", camera.position);
     mountainMat.setVector3("cameraPosition", camera.position);
+
+    // === Magic: float rocks + animate runes ===
+    if (magicLevel > 0.005) {
+      for (let i = 0; i < rocks.length; i++) {
+        const lift = magicLevel * (0.35 + Math.sin(t * 1.1 + i * 0.7) * 0.18);
+        rocks[i].position.y = rockBaseYs[i] + lift;
+      }
+      for (let i = 0; i < runes.length; i++) {
+        const r = runes[i];
+        r.mesh.position.y = r.baseY + Math.sin(t * 0.7 + i * 1.3) * 0.22 * magicLevel;
+        const mat = r.mesh.material as StandardMaterial;
+        mat.alpha = magicLevel * 0.9;
+        r.mesh.setEnabled(true);
+      }
+    } else {
+      // Snap rocks back to their resting Y; hide runes entirely so we skip their draws
+      for (let i = 0; i < rocks.length; i++) rocks[i].position.y = rockBaseYs[i];
+      for (let i = 0; i < runes.length; i++) runes[i].mesh.setEnabled(false);
+    }
+
+    // === Lightning: periodic bolts from the button, chain between rocks, sky flash ===
+    if (lightningLevel > 0.005) {
+      const now = performance.now();
+      // Higher level → shorter interval. 1000ms..150ms range.
+      const buttonInterval = 1000 - lightningLevel * 850;
+      const chainInterval  = 1400 - lightningLevel * 1100;
+      const skyInterval    = 4500 - lightningLevel * 3500;
+      if (now >= nextButtonBoltAt) {
+        spawnButtonBolt();
+        nextButtonBoltAt = now + buttonInterval * (0.5 + Math.random());
+      }
+      if (now >= nextChainBoltAt) {
+        spawnChainBolt();
+        nextChainBoltAt = now + chainInterval * (0.5 + Math.random());
+      }
+      if (now >= nextSkyFlashAt) {
+        triggerSkyFlash();
+        nextSkyFlashAt = now + skyInterval * (0.6 + Math.random());
+      }
+    }
     // Light direction softly rotates with day→night to keep things lively
     const ld = sceneLightDir;
     grass.material.setVector3("lightDir", ld);
@@ -849,6 +1027,9 @@ export function createScene(canvas: HTMLCanvasElement): SceneRefs {
     onRelease,
     onPressCancel,
     setButtonHeld,
+    setFireLevel,
+    setLightningLevel,
+    setMagicLevel,
     getButtonWorldPos,
     applyVisualLevel,
     intensity: () => visualIntensity(currentLevel),
@@ -946,6 +1127,53 @@ function createStarfield(scene: Scene): ParticleSystem {
   ps.blendMode = ParticleSystem.BLENDMODE_ADD;
   ps.start();
   return ps;
+}
+
+function createGlowRune(scene: Scene): Mesh {
+  const size = 128;
+  const c = document.createElement("canvas");
+  c.width = c.height = size;
+  const ctx = c.getContext("2d")!;
+  ctx.clearRect(0, 0, size, size);
+  // Soft violet halo around the glyph
+  const halo = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  halo.addColorStop(0.55, "rgba(170,120,255,0)");
+  halo.addColorStop(0.75, "rgba(190,150,255,0.55)");
+  halo.addColorStop(1, "rgba(190,150,255,0)");
+  ctx.fillStyle = halo;
+  ctx.fillRect(0, 0, size, size);
+  // Bright glyph
+  ctx.strokeStyle = "rgba(255, 235, 255, 1)";
+  ctx.lineWidth = 4;
+  ctx.lineCap = "round";
+  ctx.shadowBlur = 14;
+  ctx.shadowColor = "rgba(220, 180, 255, 1)";
+  ctx.beginPath();
+  ctx.arc(size / 2, size / 2, 28, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(size / 2, size / 2 - 20);
+  ctx.lineTo(size / 2 + 17, size / 2 + 14);
+  ctx.lineTo(size / 2 - 17, size / 2 + 14);
+  ctx.closePath();
+  ctx.stroke();
+  ctx.fillStyle = "rgba(255, 240, 255, 1)";
+  ctx.beginPath();
+  ctx.arc(size / 2, size / 2, 4, 0, Math.PI * 2);
+  ctx.fill();
+  const tex = new Texture(c.toDataURL("image/png"), scene, true, false, Texture.TRILINEAR_SAMPLINGMODE);
+  tex.hasAlpha = true;
+  const mat = new StandardMaterial("runeMat", scene);
+  mat.diffuseTexture = tex;
+  mat.opacityTexture = tex;
+  mat.diffuseColor = new Color3(0, 0, 0);
+  mat.specularColor = new Color3(0, 0, 0);
+  mat.emissiveColor = new Color3(0.85, 0.55, 1.0);
+  mat.disableLighting = true;
+  mat.alpha = 0;
+  const mesh = MeshBuilder.CreatePlane("runeTemplate", { size: 0.55 }, scene);
+  mesh.material = mat;
+  return mesh;
 }
 
 function createDotTexture(scene: Scene, name: string): Texture {
@@ -1092,6 +1320,7 @@ const ROCK_SHADER_UNIFORMS = [
   "baseColor", "darkColor", "mossColor",
   "snowColor", "snowLine", "snowBand",
   "darknessFactor",
+  "fireLevel", "magicLevel",
 ];
 
 function createRockMaterial(scene: Scene): ShaderMaterial {
@@ -1112,6 +1341,8 @@ function createRockMaterial(scene: Scene): ShaderMaterial {
   mat.setColor3("ambientColor", new Color3(0.42, 0.46, 0.52));
   mat.setVector3("cameraPosition", new Vector3(0, 1, -7));
   mat.setFloat("darknessFactor", 1.0);
+  mat.setFloat("fireLevel", 0);
+  mat.setFloat("magicLevel", 0);
   return mat;
 }
 
@@ -1135,6 +1366,8 @@ function createMountainMaterial(scene: Scene): ShaderMaterial {
   mat.setColor3("ambientColor", new Color3(0.42, 0.46, 0.52));
   mat.setVector3("cameraPosition", new Vector3(0, 1, -7));
   mat.setFloat("darknessFactor", 1.0);
+  mat.setFloat("fireLevel", 0);
+  mat.setFloat("magicLevel", 0);
   return mat;
 }
 
@@ -1269,6 +1502,7 @@ function createGrassField(
         "buttonPos", "buttonWindStrength", "buttonWindRadius",
         "baseColor", "tipColor", "lightDir", "lightColor", "ambientColor",
         "cameraPosition", "darknessFactor",
+        "fireLevel", "magicLevel",
       ],
     },
   );
@@ -1286,6 +1520,8 @@ function createGrassField(
   mat.setColor3("ambientColor", new Color3(0.42, 0.46, 0.52));
   mat.setVector3("cameraPosition", new Vector3(0, 1, -7));
   mat.setFloat("darknessFactor", 1.0);
+  mat.setFloat("fireLevel", 0);
+  mat.setFloat("magicLevel", 0);
   mat.setFloat("time", 0);
   blade.material = mat;
 
@@ -1458,6 +1694,8 @@ function registerLandscapeShaders(): void {
     uniform vec3 lightColor;
     uniform vec3 ambientColor;
     uniform float darknessFactor;
+    uniform float fireLevel;   // 0..1 — char + flame tips
+    uniform float magicLevel;  // 0..1 — violet glow
 
     float hash11(float p) { return fract(sin(p * 91.345) * 47453.5); }
 
@@ -1475,6 +1713,20 @@ function registerLandscapeShaders(): void {
       vec3 ldir = normalize(-lightDir);
       float ndotl = max(0.25, abs(dot(n, ldir)));
       col *= (ambientColor + lightColor * ndotl);
+
+      // Fire: char the base, burn the tips orange. Per-blade hash adds flicker.
+      if (fireLevel > 0.001) {
+        float flicker = 0.65 + 0.35 * v;
+        vec3 charCol = vec3(0.06, 0.04, 0.02);
+        col = mix(col, charCol, fireLevel * (1.0 - vHeight) * 0.7);
+        vec3 flame = mix(vec3(1.0, 0.35, 0.05), vec3(1.0, 0.8, 0.25), vHeight) * flicker;
+        col = mix(col, flame, fireLevel * vHeight * 0.9);
+        col += flame * fireLevel * vHeight * 0.45;
+      }
+      // Magic: subtle violet shimmer at the tips
+      if (magicLevel > 0.001) {
+        col += vec3(0.55, 0.3, 0.95) * magicLevel * vHeight * 0.35;
+      }
 
       col *= darknessFactor;
       gl_FragColor = vec4(col, 1.0);
@@ -1519,6 +1771,8 @@ function registerLandscapeShaders(): void {
     uniform float snowLine;
     uniform float snowBand;
     uniform float darknessFactor;
+    uniform float fireLevel;   // 0..1 — black rock + glowing orange lava cracks
+    uniform float magicLevel;  // 0..1 — violet rim glow + cool tint
 
     float hash13(vec3 p) {
       p = fract(p * vec3(443.897, 441.423, 437.195));
@@ -1584,6 +1838,16 @@ function registerLandscapeShaders(): void {
       float snowMask = snowAlt * snowSlope * (0.55 + 0.45 * snowEdge);
       base = mix(base, snowColor, snowMask);
 
+      // Fire: char the base, blow out the crevices into glowing lava seams.
+      // Uses the existing crev fbm so the lava follows the rock cracks.
+      if (fireLevel > 0.001) {
+        vec3 charCol = vec3(0.04, 0.035, 0.03);
+        base = mix(base, charCol, fireLevel * 0.85);
+        float lavaMask = smoothstep(0.55, 0.25, crev);
+        vec3 lavaCol = mix(vec3(0.85, 0.18, 0.02), vec3(1.0, 0.65, 0.15), lavaMask);
+        base += lavaCol * lavaMask * fireLevel * 1.6;
+      }
+
       // Lambert + ambient
       vec3 ldir = normalize(-lightDir);
       float ndotl = max(0.0, dot(n, ldir));
@@ -1593,6 +1857,9 @@ function registerLandscapeShaders(): void {
       vec3 vdir = normalize(cameraPosition - vWorldPos);
       float rim = pow(1.0 - max(0.0, dot(n, vdir)), 2.5);
       col += rim * lightColor * 0.18;
+
+      // Magic: cool violet rim layer on top
+      col += rim * vec3(0.65, 0.35, 1.0) * magicLevel * 0.55;
 
       col *= darknessFactor;
       gl_FragColor = vec4(col, 1.0);

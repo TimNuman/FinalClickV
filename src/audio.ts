@@ -2,32 +2,61 @@ import type { Element, HitCategory } from "./state";
 
 // Procedural sound synthesis with the Web Audio API.
 //
-// Aesthetic: 2000s action-RPG (Diablo II / Sacred / Titan Quest era) —
-// blacksmith hammers on hits, whip-swooshes on misses, lightning cracks +
-// thunder rumble for the Lightning element, low-end explosions for Fire,
-// dripping bell shimmer for Magic, brass-orchestra-hit chords on level-ups.
+// Aesthetic: high-def 2010s action-RPG / fighter (think Soul Calibur V) —
+// every hit is multiple noise + tonal layers stacked, slightly detuned and
+// stereo-spread, fed through a shared convolution reverb send and a master
+// bus compressor so the whole mix sits forward and polished.
 //
-// No sample files; every sound is layered noise bursts + filtered oscillators
-// scheduled on the AudioContext clock. Per-call frequency/duration jitter
-// gives multiple "takes" of each sound from the same code.
-//
-// AudioContext can't be created on page load (browser autoplay policy), so
-// instantiate AFTER the first user gesture (the Start button click).
+// No sample files. AudioContext must be created from a user gesture, so we
+// instantiate from the Start button click.
 
 export class AudioSystem {
   private ctx: AudioContext;
   private master: GainNode;
+  private dryBus: GainNode;
+  private wetBus: GainNode;
   private muted = false;
-  private baseGain = 0.5;
+  private baseGain = 0.6;
 
   constructor() {
     const AC =
       (window as unknown as { AudioContext: typeof AudioContext }).AudioContext ||
       (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
     this.ctx = new AC();
+
+    // Output: bus → compressor → low-shelf body boost → master → destination.
+    // The compressor keeps stacked layers from clipping and "glues" the mix.
     this.master = this.ctx.createGain();
     this.master.gain.value = this.baseGain;
     this.master.connect(this.ctx.destination);
+
+    const lowShelf = this.ctx.createBiquadFilter();
+    lowShelf.type = "lowshelf";
+    lowShelf.frequency.value = 180;
+    lowShelf.gain.value = 3.5;
+    lowShelf.connect(this.master);
+
+    const comp = this.ctx.createDynamicsCompressor();
+    comp.threshold.value = -16;
+    comp.knee.value = 14;
+    comp.ratio.value = 4;
+    comp.attack.value = 0.003;
+    comp.release.value = 0.12;
+    comp.connect(lowShelf);
+
+    // Dry bus — most signal goes here.
+    this.dryBus = this.ctx.createGain();
+    this.dryBus.gain.value = 1.0;
+    this.dryBus.connect(comp);
+
+    // Convolution reverb (procedural IR — exponentially decaying stereo noise).
+    const conv = this.ctx.createConvolver();
+    conv.buffer = this.makeReverbIR(1.6, 2.4);
+    conv.connect(comp);
+    // Wet bus controls how much of each layer is sent to the reverb.
+    this.wetBus = this.ctx.createGain();
+    this.wetBus.gain.value = 0.55;
+    this.wetBus.connect(conv);
   }
 
   setMuted(m: boolean) {
@@ -37,114 +66,177 @@ export class AudioSystem {
   isMuted(): boolean { return this.muted; }
   resume(): void { if (this.ctx.state === "suspended") void this.ctx.resume(); }
 
-  // === Hit sounds ============================================================
-  // Each hit category layers different combinations of the physical primitives
-  // (hammer, swoosh, metal ring, sub-thump). isCrit adds a high cymbal-ish
-  // accent on top.
+  // === HIGH-LEVEL SOUNDS =====================================================
   playHit(category: HitCategory, isCrit = false): void {
     const r = (range: number) => (Math.random() - 0.5) * 2 * range;
     switch (category) {
       case "miss":
-        // Light whip-swoosh — like the strike clearly missed
-        this.swoosh(0.20, 1600 + r(200), 0.18);
-        this.subThump(55 + r(8), 0.10, 0.07);
+        // Stereo whip-swoosh + soft body thud — feels like a wide miss
+        this.swoosh({ duration: 0.22, peakFreq: 1700 + r(180), peak: 0.18, pan: r(0.4) });
+        this.subThump(55 + r(8), 0.12, 0.06, 0);
         break;
-      case "ok":
-        // Small chink — tip of the hammer
-        this.hammer({ ringFreq: 2400 + r(180), strength: 0.55 });
+
+      case "ok": {
+        // Light strike: short metal tap + tiny body
+        this.impactCrack(0.020, 6800 + r(400), 0.20);
+        this.fatRing(2500 + r(160), 0.32, 0.10, 0.012);
+        this.subThump(85, 0.10, 0.10, 0);
         break;
-      case "good":
-        // Solid mid hammer hit
-        this.hammer({ ringFreq: 1900 + r(160), strength: 0.85 });
+      }
+
+      case "good": {
+        // Solid hammer: triple-layer noise crack + tuned ring + body
+        this.impactCrack(0.025, 6200 + r(400), 0.26);
+        this.noiseBurst({ duration: 0.05, freq: 1800, q: 1.0, peak: 0.14, attack: 0.0015 });
+        this.fatRing(1900 + r(140), 0.45, 0.16, 0.018);
+        this.subThump(80, 0.18, 0.15, 0);
         break;
-      case "great":
-        // Heavy hammer + a second metal layer (anvil-stacked ring)
-        this.hammer({ ringFreq: 1500 + r(120), strength: 1.05 });
-        this.metalRing(2200 + r(180), 0.32, 0.10);
+      }
+
+      case "great": {
+        // Heavier hammer + a second ring layer + brass body undercurrent
+        this.impactCrack(0.028, 5800 + r(360), 0.30);
+        this.noiseBurst({ duration: 0.06, freq: 1400, q: 1.1, peak: 0.18, attack: 0.0015 });
+        this.fatRing(1500 + r(100), 0.55, 0.20, 0.020);
+        this.fatRing(2350 + r(160), 0.45, 0.11, 0.014);
+        this.brassStab(140, 0.30, 0.10);
+        this.subThump(70, 0.24, 0.20, 0);
         break;
-      case "perfect":
-        // Heavy hammer + bell-like ring + brass body
-        this.hammer({ ringFreq: 1100 + r(70), strength: 1.25 });
-        this.metalRing(1700 + r(120), 0.55, 0.14);
-        this.metalRing(2550 + r(160), 0.45, 0.08);
-        this.brassStab(220 + r(8), 0.30, 0.14);
+      }
+
+      case "perfect": {
+        // Bell-tang impact: long detuned bell-ring stack + brass body
+        this.impactCrack(0.032, 5500 + r(320), 0.34);
+        this.noiseBurst({ duration: 0.08, freq: 1200, q: 1.1, peak: 0.20, attack: 0.002 });
+        this.fatRing(1100 + r(60), 0.85, 0.24, 0.025);
+        this.fatRing(1660 + r(80), 0.75, 0.15, 0.018);
+        this.fatRing(2400 + r(100), 0.60, 0.10, 0.014);
+        this.brassStab(196, 0.40, 0.16); // G3
+        this.subThump(62, 0.30, 0.22, 0);
         break;
-      case "legendary":
-        // Explosion + orchestra hit chord
-        this.explosion(0.55, 0.32);
-        this.orchestraHit({ root: 196, durationS: 0.55, peak: 0.22 });   // G3 chord
+      }
+
+      case "legendary": {
+        // Sword-clash + boom + orchestra hit + cymbal — full screen
+        this.impactCrack(0.040, 5200 + r(300), 0.38);
+        this.noiseBurst({ duration: 0.10, freq: 1000, q: 1.2, peak: 0.22, attack: 0.002 });
+        this.fatRing(800 + r(40), 1.10, 0.20, 0.030);
+        this.fatRing(1240 + r(60), 0.90, 0.16, 0.022);
+        this.explosion(0.70, 0.30);
+        this.orchestraHit({ root: 196, durationS: 0.85, peak: 0.24 });
         break;
+      }
     }
     if (isCrit && category !== "miss") {
-      // Bright cymbal accent
-      this.noiseBurst({ duration: 0.18, freq: 7000, q: 1.2, peak: 0.10 });
-      this.metalRing(3200 + r(200), 0.18, 0.08);
+      // Bright zing on top — like a sword skimming the parry
+      this.cymbalCrash(0.45, 0.10);
+      this.fatRing(3200 + r(220), 0.30, 0.08, 0.018);
     }
   }
 
-  // === Elemental bump sounds =================================================
   playElement(element: Element): void {
     const r = (range: number) => (Math.random() - 0.5) * 2 * range;
     if (element === "fire") {
-      // Crackling explosion — short version of the legendary boom
-      this.explosion(0.45, 0.28);
+      // Deep explosion with debris crackle
+      this.explosion(0.60, 0.34);
+      this.noiseBurst({ duration: 0.18, freq: 900, q: 1.5, peak: 0.10, attack: 0.005 });
     } else if (element === "lightning") {
-      // Sharp electric crack + rolling thunder tail
-      this.lightningCrack(0.45 + Math.random() * 0.1);
+      // Sharp arc crack + rolling thunder
+      this.lightningCrack(0.55);
     } else {
-      // Magic shimmer — bell-like detuned harmonics + soft sparkle
-      const base = 720 + r(40);
-      this.metalRing(base,        0.7, 0.15);
-      this.metalRing(base * 1.51, 0.6, 0.10);
-      this.metalRing(base * 2.01, 0.5, 0.07);
-      this.sparkle(2400, 4);
+      // Magic bell shimmer — heavy reverb, vibrato-modulated bells
+      const base = 660 + r(40);
+      this.bell(base,         1.10, 0.18);
+      this.bell(base * 1.51,  0.95, 0.12);
+      this.bell(base * 2.01,  0.85, 0.09);
+      this.bell(base * 3.005, 0.65, 0.06);
+      this.shimmer(2400, 6);
     }
   }
 
-  // === Level up + start button ==============================================
   playLevelUp(): void {
-    // Big orchestra hit + cymbal crash
-    this.orchestraHit({ root: 261, durationS: 0.75, peak: 0.28 }); // C4 chord
-    this.cymbalCrash(0.8);
+    // Full orchestral stinger
+    this.orchestraHit({ root: 261, durationS: 0.95, peak: 0.30 }); // C4
+    this.cymbalCrash(1.0, 0.20);
+    this.subThump(50, 0.40, 0.25, 0);
   }
 
   playStartButton(): void {
-    // Solid metal clang — like setting down a gauntlet
-    this.hammer({ ringFreq: 1300, strength: 0.9 });
+    // Heavy metallic clang — confident "armour-on"
+    this.impactCrack(0.030, 5800, 0.30);
+    this.fatRing(1500, 0.55, 0.18, 0.022);
+    this.subThump(80, 0.25, 0.20, 0);
   }
 
-  // === Synth primitives ======================================================
+  // === PRIMITIVES ============================================================
 
-  // Blacksmith hammer: sharp metallic transient + tuned ring + low body thump.
-  private hammer(opts: { ringFreq: number; strength: number }): void {
-    const s = opts.strength;
-    // Sharp metallic transient (filtered noise click)
-    this.noiseBurst({ duration: 0.04, freq: 5500, q: 1.5, peak: 0.22 * s, attack: 0.001, decay: 0.04 });
-    // Tuned metal ring — two slightly detuned sines for "real" metal beating
-    this.metalRing(opts.ringFreq,         0.28, 0.18 * s);
-    this.metalRing(opts.ringFreq * 1.005, 0.28, 0.12 * s);
-    // Low-end body thump
-    this.subThump(85, 0.18, 0.18 * s);
+  // Tightest noise transient — the "click" of a metal-on-metal impact.
+  private impactCrack(duration: number, freq: number, peak: number): void {
+    this.noiseBurst({ duration, freq, q: 0.9, peak, attack: 0.0005, wet: 0.25 });
   }
 
-  // Bell-like decay on a sine — used for hammer rings and magic shimmer
-  private metalRing(freq: number, duration: number, peak: number): void {
+  // Stereo-spread, slightly detuned sine ring — the "tang" sustain after a
+  // hit. Three layers with vibrato to avoid the dry computer-sine feel.
+  private fatRing(freq: number, duration: number, peak: number, detune: number): void {
+    this.sineLayer(freq * (1 - detune), duration, peak * 0.78, -0.35, 4);
+    this.sineLayer(freq,                duration, peak,         0.0,  3);
+    this.sineLayer(freq * (1 + detune), duration, peak * 0.78,  0.35, 5);
+  }
+
+  // Sine with vibrato (LFO on frequency) + stereo pan + reverb send.
+  private sineLayer(freq: number, duration: number, peak: number, pan: number, vibratoHz: number): void {
     const now = this.ctx.currentTime;
     const osc = this.ctx.createOscillator();
-    const env = this.ctx.createGain();
     osc.type = "sine";
     osc.frequency.setValueAtTime(freq, now);
+    // Slight downward pitch envelope makes the ring feel "settled"
+    osc.frequency.exponentialRampToValueAtTime(freq * 0.997, now + duration);
+    // Vibrato
+    const lfo = this.ctx.createOscillator();
+    const lfoGain = this.ctx.createGain();
+    lfo.frequency.value = vibratoHz;
+    lfoGain.gain.value = freq * 0.0025;
+    lfo.connect(lfoGain).connect(osc.frequency);
+    lfo.start(now);
+    lfo.stop(now + duration + 0.02);
+    // Envelope + pan + send
+    const env = this.ctx.createGain();
     env.gain.setValueAtTime(0, now);
-    env.gain.linearRampToValueAtTime(peak, now + 0.004);
+    env.gain.linearRampToValueAtTime(peak, now + 0.005);
     env.gain.exponentialRampToValueAtTime(0.0001, now + duration);
     osc.connect(env);
-    env.connect(this.master);
+    this.routeStereo(env, pan, 0.55);
     osc.start(now);
     osc.stop(now + duration + 0.02);
   }
 
-  // Sub-bass impulse with quick pitch slide — gives "body" to a hit
-  private subThump(freq: number, duration: number, peak: number): void {
+  // Bell — like sineLayer but with an inharmonic FM partial for the bell tang.
+  private bell(freq: number, duration: number, peak: number): void {
+    const now = this.ctx.currentTime;
+    const carrier = this.ctx.createOscillator();
+    const mod = this.ctx.createOscillator();
+    const modGain = this.ctx.createGain();
+    carrier.type = "sine";
+    carrier.frequency.value = freq;
+    mod.type = "sine";
+    mod.frequency.value = freq * 2.76; // inharmonic — bell-like
+    modGain.gain.setValueAtTime(freq * 0.9, now);
+    modGain.gain.exponentialRampToValueAtTime(0.001, now + duration * 0.6);
+    mod.connect(modGain).connect(carrier.frequency);
+    const env = this.ctx.createGain();
+    env.gain.setValueAtTime(0, now);
+    env.gain.linearRampToValueAtTime(peak, now + 0.004);
+    env.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+    carrier.connect(env);
+    this.routeStereo(env, (Math.random() - 0.5) * 0.6, 0.7);
+    carrier.start(now);
+    mod.start(now);
+    carrier.stop(now + duration + 0.02);
+    mod.stop(now + duration + 0.02);
+  }
+
+  // Sub-bass impulse with pitch slide — the "body" of every hit.
+  private subThump(freq: number, duration: number, peak: number, wet = 0.1): void {
     const now = this.ctx.currentTime;
     const osc = this.ctx.createOscillator();
     const env = this.ctx.createGain();
@@ -155,53 +247,50 @@ export class AudioSystem {
     env.gain.linearRampToValueAtTime(peak, now + 0.003);
     env.gain.exponentialRampToValueAtTime(0.0001, now + duration);
     osc.connect(env);
-    env.connect(this.master);
+    this.routeStereo(env, 0, wet);
     osc.start(now);
     osc.stop(now + duration + 0.02);
   }
 
-  // Whip-swoosh: bandpass on noise, sweeping the centre freq up then down
-  private swoosh(duration: number, peakFreq: number, peak: number): void {
+  // Whip swoosh — bandpass noise with swept centre + slight pan.
+  private swoosh(opts: { duration: number; peakFreq: number; peak: number; pan: number }): void {
     const now = this.ctx.currentTime;
-    const noise = this.makeNoise(duration);
+    const noise = this.makeNoise(opts.duration);
     const bp = this.ctx.createBiquadFilter();
     bp.type = "bandpass";
-    bp.frequency.setValueAtTime(peakFreq * 0.4, now);
-    bp.frequency.exponentialRampToValueAtTime(peakFreq * 1.6, now + duration * 0.55);
-    bp.frequency.exponentialRampToValueAtTime(peakFreq * 0.6, now + duration);
+    bp.frequency.setValueAtTime(opts.peakFreq * 0.4, now);
+    bp.frequency.exponentialRampToValueAtTime(opts.peakFreq * 1.7, now + opts.duration * 0.5);
+    bp.frequency.exponentialRampToValueAtTime(opts.peakFreq * 0.5, now + opts.duration);
     bp.Q.value = 2.5;
     const env = this.ctx.createGain();
     env.gain.setValueAtTime(0, now);
-    env.gain.linearRampToValueAtTime(peak, now + duration * 0.35);
-    env.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+    env.gain.linearRampToValueAtTime(opts.peak, now + opts.duration * 0.3);
+    env.gain.exponentialRampToValueAtTime(0.0001, now + opts.duration);
     noise.connect(bp);
     bp.connect(env);
-    env.connect(this.master);
+    this.routeStereo(env, opts.pan, 0.30);
     noise.start(now);
-    noise.stop(now + duration);
+    noise.stop(now + opts.duration);
   }
 
-  // Lightning crack: extremely sharp transient + sustained crackle + thunder
+  // Lightning crack: instant transient + mid sustain + delayed thunder rumble.
   private lightningCrack(duration: number): void {
-    const now = this.ctx.currentTime;
-    // Sharp crack — wideband but bright, almost instant decay
-    this.noiseBurst({ duration: 0.06, freq: 6500, q: 1.0, peak: 0.32, attack: 0.0008, decay: 0.06 });
-    // Mid sustain (the "tsst" of the arc)
-    this.noiseBurst({ duration: 0.18, freq: 2400, q: 3.0, peak: 0.18, attack: 0.005 });
-    // Delayed low-end rumble (thunder)
-    this.scheduleNoiseBurst({
-      delay: 0.08, duration: duration, freq: 130, q: 1.4, peak: 0.20, attack: 0.04, decay: duration,
-    });
+    this.noiseBurst({ duration: 0.06, freq: 6800, q: 1.0, peak: 0.34, attack: 0.0006, wet: 0.40 });
+    this.noiseBurst({ duration: 0.20, freq: 2400, q: 3.0, peak: 0.18, attack: 0.004, wet: 0.45 });
+    // Thunder rumble fires a touch later — feels like the sound catching up
+    setTimeout(() => {
+      this.noiseBurst({ duration: duration, freq: 100, q: 1.0, peak: 0.22, attack: 0.04, wet: 0.55 });
+      this.subThump(45, duration * 0.6, 0.20, 0.30);
+    }, 70);
   }
 
-  // Sub-bass-dominated burst with low-pass-swept noise — explosion / fire
+  // Lowpass-swept noise + sub thump + mid debris crackle — explosion / fire.
   private explosion(duration: number, peak: number): void {
     const now = this.ctx.currentTime;
-    // Rumble core: lowpass-swept noise
     const noise = this.makeNoise(duration);
     const lp = this.ctx.createBiquadFilter();
     lp.type = "lowpass";
-    lp.frequency.setValueAtTime(2500, now);
+    lp.frequency.setValueAtTime(2800, now);
     lp.frequency.exponentialRampToValueAtTime(110, now + duration);
     const env = this.ctx.createGain();
     env.gain.setValueAtTime(0, now);
@@ -209,38 +298,38 @@ export class AudioSystem {
     env.gain.exponentialRampToValueAtTime(0.0001, now + duration);
     noise.connect(lp);
     lp.connect(env);
-    env.connect(this.master);
+    this.routeStereo(env, 0, 0.50);
     noise.start(now);
     noise.stop(now + duration);
     // Initial impact thump
-    this.subThump(45, duration * 0.5, peak * 1.1);
-    // Mid-range debris crackle
-    this.noiseBurst({ duration: duration * 0.4, freq: 1800, q: 2, peak: peak * 0.5, attack: 0.005 });
+    this.subThump(45, duration * 0.55, peak * 1.05, 0.25);
+    // Mid-range debris crackle (stereo-widened)
+    this.noiseBurst({ duration: duration * 0.4, freq: 1700, q: 1.8, peak: peak * 0.45, attack: 0.005, pan: -0.3, wet: 0.40 });
+    this.noiseBurst({ duration: duration * 0.4, freq: 2400, q: 1.8, peak: peak * 0.35, attack: 0.005, pan: 0.3, wet: 0.40 });
   }
 
-  // Orchestra hit: brass-stab chord + cymbal-like high noise + low pulse
+  // Brass-stab chord + cymbal-ish HP-noise + low pulse = orchestra hit.
   private orchestraHit(opts: { root: number; durationS: number; peak: number }): void {
     const { root, durationS, peak } = opts;
-    // Brass-ish stack: sawtooth chord (root, 5th, octave, 12th)
     this.brassStab(root,         durationS, peak);
     this.brassStab(root * 1.498, durationS, peak * 0.75);
     this.brassStab(root * 2.0,   durationS, peak * 0.60);
-    this.brassStab(root * 3.0,   durationS * 0.7, peak * 0.35);
-    // Low impact thump
-    this.subThump(root / 2, durationS * 0.4, peak * 1.0);
-    // Slight crash on top
-    this.noiseBurst({ duration: durationS, freq: 4500, q: 0.9, peak: peak * 0.35, attack: 0.005, decay: durationS });
+    this.brassStab(root * 2.997, durationS * 0.75, peak * 0.40);
+    this.brassStab(root * 4.0,   durationS * 0.55, peak * 0.25);
+    this.subThump(root / 2, durationS * 0.45, peak * 1.05, 0.20);
+    // Cymbal-like splash on top
+    this.cymbalCrash(durationS, peak * 0.55);
   }
 
-  // Sawtooth stab — single brass-like layer with quick attack and decay
+  // Sawtooth stab through a lowpass envelope — single brass-like layer.
   private brassStab(freq: number, duration: number, peak: number): void {
     const now = this.ctx.currentTime;
     const osc = this.ctx.createOscillator();
     const env = this.ctx.createGain();
     const lp = this.ctx.createBiquadFilter();
     lp.type = "lowpass";
-    lp.frequency.setValueAtTime(freq * 5, now);
-    lp.frequency.exponentialRampToValueAtTime(freq * 1.8, now + duration);
+    lp.frequency.setValueAtTime(freq * 6, now);
+    lp.frequency.exponentialRampToValueAtTime(freq * 1.6, now + duration);
     osc.type = "sawtooth";
     osc.frequency.value = freq;
     env.gain.setValueAtTime(0, now);
@@ -248,30 +337,49 @@ export class AudioSystem {
     env.gain.exponentialRampToValueAtTime(0.0001, now + duration);
     osc.connect(lp);
     lp.connect(env);
-    env.connect(this.master);
+    this.routeStereo(env, (Math.random() - 0.5) * 0.5, 0.45);
     osc.start(now);
     osc.stop(now + duration + 0.02);
   }
 
-  // Cymbal crash: bright wide-band noise that decays over time
-  private cymbalCrash(duration: number): void {
+  // Bright wide-band noise that decays — cymbal / hi-hat crash.
+  private cymbalCrash(duration: number, peak: number): void {
     const now = this.ctx.currentTime;
     const noise = this.makeNoise(duration);
     const hp = this.ctx.createBiquadFilter();
     hp.type = "highpass";
-    hp.frequency.value = 3000;
+    hp.frequency.value = 3500;
     const env = this.ctx.createGain();
     env.gain.setValueAtTime(0, now);
-    env.gain.linearRampToValueAtTime(0.18, now + 0.01);
+    env.gain.linearRampToValueAtTime(peak, now + 0.005);
     env.gain.exponentialRampToValueAtTime(0.0001, now + duration);
     noise.connect(hp);
     hp.connect(env);
-    env.connect(this.master);
+    this.routeStereo(env, 0, 0.55);
     noise.start(now);
     noise.stop(now + duration);
   }
 
-  // Generic filtered noise burst
+  // Quick sequence of high sines for magic sparkle tail.
+  private shimmer(baseFreq: number, count: number): void {
+    for (let i = 0; i < count; i++) {
+      const f = baseFreq * (1 + Math.random() * 0.8);
+      const now = this.ctx.currentTime + i * 0.05;
+      const osc = this.ctx.createOscillator();
+      const env = this.ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(f, now);
+      env.gain.setValueAtTime(0, now);
+      env.gain.linearRampToValueAtTime(0.08, now + 0.004);
+      env.gain.exponentialRampToValueAtTime(0.0001, now + 0.28);
+      osc.connect(env);
+      this.routeStereo(env, (Math.random() - 0.5) * 0.8, 0.6);
+      osc.start(now);
+      osc.stop(now + 0.30);
+    }
+  }
+
+  // Generic filtered noise burst with optional pan + reverb send.
   private noiseBurst(opts: {
     duration: number;
     freq: number;
@@ -279,19 +387,10 @@ export class AudioSystem {
     peak: number;
     attack?: number;
     decay?: number;
+    pan?: number;
+    wet?: number;
   }): void {
-    this.scheduleNoiseBurst({ delay: 0, ...opts });
-  }
-  private scheduleNoiseBurst(opts: {
-    delay: number;
-    duration: number;
-    freq: number;
-    q: number;
-    peak: number;
-    attack?: number;
-    decay?: number;
-  }): void {
-    const now = this.ctx.currentTime + opts.delay;
+    const now = this.ctx.currentTime;
     const attack = opts.attack ?? 0.005;
     const decay = opts.decay ?? opts.duration;
     const noise = this.makeNoise(opts.duration);
@@ -305,31 +404,28 @@ export class AudioSystem {
     env.gain.exponentialRampToValueAtTime(0.0001, now + decay);
     noise.connect(filt);
     filt.connect(env);
-    env.connect(this.master);
+    this.routeStereo(env, opts.pan ?? 0, opts.wet ?? 0.30);
     noise.start(now);
     noise.stop(now + opts.duration + 0.02);
   }
 
-  // Quick sequence of high-pitched sines — adds a magic sparkle tail
-  private sparkle(baseFreq: number, count: number): void {
-    for (let i = 0; i < count; i++) {
-      const f = baseFreq * (1 + Math.random() * 0.7);
-      const now = this.ctx.currentTime + i * 0.045;
-      const osc = this.ctx.createOscillator();
-      const env = this.ctx.createGain();
-      osc.type = "sine";
-      osc.frequency.setValueAtTime(f, now);
-      env.gain.setValueAtTime(0, now);
-      env.gain.linearRampToValueAtTime(0.08, now + 0.004);
-      env.gain.exponentialRampToValueAtTime(0.0001, now + 0.20);
-      osc.connect(env);
-      env.connect(this.master);
-      osc.start(now);
-      osc.stop(now + 0.22);
+  // === Routing helpers =======================================================
+
+  // Connect a source node to dry bus + reverb send with stereo pan.
+  private routeStereo(node: AudioNode, pan: number, wet: number): void {
+    const pn = this.ctx.createStereoPanner();
+    pn.pan.value = Math.max(-1, Math.min(1, pan));
+    node.connect(pn);
+    pn.connect(this.dryBus);
+    if (wet > 0) {
+      const send = this.ctx.createGain();
+      send.gain.value = wet;
+      pn.connect(send);
+      send.connect(this.wetBus);
     }
   }
 
-  // White noise buffer source — building block for everything noise-based
+  // White noise → AudioBufferSourceNode
   private makeNoise(duration: number): AudioBufferSourceNode {
     const len = Math.max(1, Math.floor(this.ctx.sampleRate * duration));
     const buf = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
@@ -338,5 +434,19 @@ export class AudioSystem {
     const src = this.ctx.createBufferSource();
     src.buffer = buf;
     return src;
+  }
+
+  // Synthetic impulse response for the reverb — exponentially decaying stereo
+  // noise. Cheap, sounds like a small-medium hall.
+  private makeReverbIR(seconds: number, decay: number): AudioBuffer {
+    const len = Math.floor(this.ctx.sampleRate * seconds);
+    const ir = this.ctx.createBuffer(2, len, this.ctx.sampleRate);
+    for (let ch = 0; ch < 2; ch++) {
+      const data = ir.getChannelData(ch);
+      for (let i = 0; i < len; i++) {
+        data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, decay);
+      }
+    }
+    return ir;
   }
 }

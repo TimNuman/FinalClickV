@@ -1,4 +1,4 @@
-import type { GameState, HitResult } from "./state";
+import type { Element, GameState, HitResult } from "./state";
 
 export class HUD {
   private hitLayer = document.getElementById("hitTextLayer") as HTMLElement;
@@ -81,6 +81,18 @@ export class HUD {
     this.recoveryLabel.textContent = ready ? "READY" : "CHARGING";
   }
 
+  // Floating "+X% FIRE" badge at the click point — one per element triggered.
+  // index lets us stack multiple bumps from the same click vertically.
+  showElementBump(element: Element, percentPct: number, screenX: number, screenY: number, index = 0) {
+    const el = document.createElement("div");
+    el.className = `element-bump ${element}`;
+    el.textContent = `+${percentPct.toFixed(1)}% ${element.toUpperCase()}`;
+    el.style.left = `${screenX}px`;
+    el.style.top = `${screenY - 70 - index * 32}px`;
+    this.hitLayer.appendChild(el);
+    setTimeout(() => el.remove(), 1400);
+  }
+
   pulseStreak() {
     this.streakNumber.classList.remove("pop");
     void this.streakNumber.offsetWidth;
@@ -88,14 +100,17 @@ export class HUD {
     setTimeout(() => this.streakNumber.classList.remove("pop"), 280);
   }
 
-  showLevelUp(level: number, intensity: number) {
+  showLevelUp(level: number, intensity: number, element: Element | null = null, chanceBoostPct = 0) {
     const banner = document.createElement("div");
     banner.className = "levelup-banner";
     if (intensity < 0.15) banner.classList.add("subtle");
     const baseFont = 48;
     const maxFont = 96;
     banner.style.fontSize = `${Math.round(baseFont + (maxFont - baseFont) * intensity)}px`;
-    banner.innerHTML = `<span class="label">Level</span><span class="num">${level}</span><span class="sub">+POWER UNLOCKED</span>`;
+    const sub = element
+      ? `<span class="sub element ${element}">+${chanceBoostPct.toFixed(1)}% ${element} chance</span>`
+      : `<span class="sub">+POWER UNLOCKED</span>`;
+    banner.innerHTML = `<span class="label">Level</span><span class="num">${level}</span>${sub}`;
     this.hud.appendChild(banner);
     setTimeout(() => banner.remove(), 2300);
 

@@ -607,6 +607,30 @@ body {
   text-shadow: none;
 }
 
+/* Per-element bump badges — small floating tags shown above the click point */
+.element-bump {
+  position: absolute;
+  transform: translate(-50%, 0);
+  pointer-events: none;
+  white-space: nowrap;
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  text-shadow: 0 0 10px currentColor, 0 2px 6px rgba(0, 0, 0, 0.75);
+  -webkit-text-stroke: 0.5px rgba(0, 0, 0, 0.6);
+  animation: elementBumpFloat 1.4s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+.element-bump.fire      { color: #fb923c; }
+.element-bump.lightning { color: #67e8f9; }
+.element-bump.magic     { color: #c084fc; }
+
+@keyframes elementBumpFloat {
+  0%   { opacity: 0; transform: translate(-50%, 0) scale(0.5); }
+  20%  { opacity: 1; transform: translate(-50%, -10px) scale(1.1); }
+  100% { opacity: 0; transform: translate(-50%, -90px) scale(0.95); }
+}
+
 @keyframes hitFloat {
   0% {
     opacity: 0;
@@ -722,7 +746,15 @@ body {
   margin-top: 8px;
   text-align: center;
   -webkit-text-stroke: 1px rgba(0, 0, 0, 0.6);
+  text-transform: uppercase;
 }
+.levelup-banner .sub.element {
+  letter-spacing: 5px;
+  -webkit-text-stroke: 0;
+}
+.levelup-banner .sub.element.fire     { color: #fb923c; text-shadow: 0 0 16px rgba(251, 146, 60, 0.9), 0 2px 6px rgba(0,0,0,0.7); }
+.levelup-banner .sub.element.lightning{ color: #67e8f9; text-shadow: 0 0 16px rgba(103, 232, 249, 0.9), 0 2px 6px rgba(0,0,0,0.7); }
+.levelup-banner .sub.element.magic    { color: #c084fc; text-shadow: 0 0 16px rgba(192, 132, 252, 0.9), 0 2px 6px rgba(0,0,0,0.7); }
 
 @keyframes levelupAnim {
   0% { opacity: 0; transform: translate(-50%, -50%) scale(0.4); filter: blur(8px); }

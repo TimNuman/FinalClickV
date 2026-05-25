@@ -267,9 +267,9 @@ export class GameState {
 
 // Each successful per-hit roll moves the element's visual level up by this much.
 // Capped at 1.0, so ~45 successes (per element) fully maxes it.
-const ELEMENT_BUMP_STEP = 0.022;
+export const ELEMENT_BUMP_STEP = 0.022;
 // Per level-up, the chosen element's per-hit chance grows by this much.
-const LEVEL_UP_CHANCE_BOOST = 0.012;
+export const LEVEL_UP_CHANCE_BOOST = 0.012;
 // Hard ceiling on per-hit chance so the late game doesn't trigger every click.
 const MAX_BUMP_CHANCE = 0.30;
 

@@ -1,5 +1,5 @@
 import { createScene } from "./scene";
-import { GameState } from "./state";
+import { ELEMENT_BUMP_STEP, GameState, LEVEL_UP_CHANCE_BOOST } from "./state";
 import { VFX } from "./vfx";
 import { HUD } from "./hud";
 import { isEditModeRequested, mountEditPanel } from "./editmode";
@@ -104,14 +104,16 @@ function commitRelease() {
   const intensity = refs.intensity();
 
   // Sync elemental scene state to gameplay state (skipped in edit mode so the
-  // tweak sliders aren't overridden by the click that just happened).
-  if (!editMode && result.elementsTriggered.length > 0) {
-    for (const el of result.elementsTriggered) {
+  // tweak sliders aren't overridden by the click that just happened). Also
+  // surface a "+X% FIRE" badge per element bumped, stacked above the click.
+  result.elementsTriggered.forEach((el, i) => {
+    if (!editMode) {
       if (el === "fire") refs.setFireLevel(state.fireLevel);
       else if (el === "lightning") refs.setLightningLevel(state.lightningLevel);
       else if (el === "magic") refs.setMagicLevel(state.magicLevel);
     }
-  }
+    hud.showElementBump(el, ELEMENT_BUMP_STEP * 100, pressX, pressY, i);
+  });
 
   vfx.triggerHit(result);
   vfx.setStreakTier(state.streakTier);
@@ -130,7 +132,7 @@ function commitRelease() {
     if (!editMode) refs.applyVisualLevel(state.level);
     refs.cycleCameraAngle(1.4);
     const newIntensity = refs.intensity();
-    hud.showLevelUp(result.newLevel, newIntensity);
+    hud.showLevelUp(result.newLevel, newIntensity, result.levelUpElement, LEVEL_UP_CHANCE_BOOST * 100);
     cameraShake(0.08 + newIntensity * 0.5, 0.4 + newIntensity * 0.5);
     if (newIntensity > 0.25) {
       vfx.triggerHit({ ...result, category: "legendary" });

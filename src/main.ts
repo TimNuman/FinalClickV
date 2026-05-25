@@ -70,18 +70,44 @@ let muted = false;
 
 const showMenuButton = (show: boolean) => menuButton?.classList.toggle("hidden", !show);
 
-if (bgm) bgm.loop = true; // belt-and-braces: also set via JS in case the HTML attr is ever removed
+// Music is intentionally NOT routed through Web Audio — on iOS Safari,
+// createMediaElementSource silently kills playback whenever the AudioContext
+// is suspended or in a weird state, which kept happening for the credits
+// track. Plain HTMLAudioElement + element.muted/volume sidesteps all of that.
+const creditsAudio = document.getElementById("creditsAudio") as HTMLAudioElement | null;
+
+if (bgm) bgm.loop = true;
+if (creditsAudio) creditsAudio.loop = true;
+
 const tryPlayMusic = () => {
   if (!bgm) return;
   bgm.muted = muted;
   void bgm.play().catch(() => { /* blocked — will retry on first input */ });
 };
 
+// iOS only allows an <audio> element to be controlled programmatically AFTER
+// it has been played at least once inside a user gesture. We "prime" the
+// credits track by playing it briefly muted on the first user input, then
+// pausing — so the .play() inside openCredits later actually works.
+const primeCreditsAudio = () => {
+  if (!creditsAudio) return;
+  const prevMuted = creditsAudio.muted;
+  creditsAudio.muted = true;
+  void creditsAudio.play()
+    .then(() => {
+      creditsAudio.pause();
+      creditsAudio.currentTime = 0;
+      creditsAudio.muted = prevMuted;
+    })
+    .catch(() => {
+      creditsAudio.muted = prevMuted;
+    });
+};
+
 const ensureAudioSystem = (): AudioSystem | null => {
   if (audio) return audio;
   try {
     audio = new AudioSystem();
-    if (bgm) audio.attachMusic(bgm);
     audio.setMuted(muted);
   } catch (e) {
     console.warn("audio init failed", e);
@@ -92,10 +118,11 @@ const ensureAudioSystem = (): AudioSystem | null => {
 // 1. Best-effort: kick BGM the moment the page loads
 tryPlayMusic();
 
-// 2. First user input anywhere on the page → start music + init AudioSystem
+// 2. First user input anywhere on the page → start music + init AudioSystem + prime credits
 const onFirstInput = () => {
   ensureAudioSystem();
   tryPlayMusic();
+  primeCreditsAudio();
   document.removeEventListener("pointerdown", onFirstInput, true);
   document.removeEventListener("keydown", onFirstInput, true);
   document.removeEventListener("touchstart", onFirstInput, true);
@@ -112,6 +139,7 @@ const refreshMuteUi = () => {
 const toggleMute = () => {
   muted = !muted;
   if (bgm) bgm.muted = muted;
+  if (creditsAudio) creditsAudio.muted = muted;
   audio?.setMuted(muted);
   refreshMuteUi();
 };
@@ -134,7 +162,6 @@ const creditsScreen = document.getElementById("creditsScreen") as HTMLElement | 
 const creditsButton = document.getElementById("creditsButton") as HTMLButtonElement | null;
 const creditsClose  = document.getElementById("creditsClose")  as HTMLButtonElement | null;
 const creditsRoll   = document.getElementById("creditsRoll")   as HTMLElement | null;
-const creditsAudio  = document.getElementById("creditsAudio")  as HTMLAudioElement | null;
 let creditsOpen = false;
 
 const openCredits = () => {
@@ -214,15 +241,6 @@ creditsRoll?.addEventListener("animationend", () => {
   if (creditsOpen) closeCredits();
 });
 
-// Once the AudioSystem exists (on first user input), wire the credits track
-// through the same musicGain bus so the mute button silences it too.
-const attachCreditsTrack = () => {
-  if (audio && creditsAudio) audio.attachMusic(creditsAudio);
-  document.removeEventListener("pointerdown", attachCreditsTrack, true);
-  document.removeEventListener("keydown", attachCreditsTrack, true);
-};
-document.addEventListener("pointerdown", attachCreditsTrack, true);
-document.addEventListener("keydown", attachCreditsTrack, true);
 startButton.addEventListener("click", beginGame);
 // Also allow Enter/Space on the focused start button (default browser behaviour
 // would trigger a click, but listen explicitly so Space doesn't also fire a

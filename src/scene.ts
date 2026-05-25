@@ -62,6 +62,7 @@ export interface SceneRefs {
   applyVisualLevel: (level: number) => void;
   intensity: () => number;
   cycleCameraAngle: (duration?: number) => void;
+  setFlyOverMode: (on: boolean) => void;
 }
 
 export function createScene(canvas: HTMLCanvasElement): SceneRefs {
@@ -888,6 +889,20 @@ export function createScene(canvas: HTMLCanvasElement): SceneRefs {
     moveCamera(a.alpha, a.beta, radius, duration);
   };
 
+  // Auto-cycle camera angles continuously — used during the credits roll
+  // for cinematic fly-overs.
+  let flyOverTimer: number | null = null;
+  const setFlyOverMode = (on: boolean) => {
+    if (flyOverTimer !== null) {
+      clearInterval(flyOverTimer);
+      flyOverTimer = null;
+    }
+    if (on) {
+      cycleCameraAngle(3.0);
+      flyOverTimer = window.setInterval(() => cycleCameraAngle(3.8), 5000);
+    }
+  };
+
   // === applyVisualLevel: maps level → all visual properties ===
   const applyVisualLevel = (level: number) => {
     currentLevel = level;
@@ -1034,6 +1049,7 @@ export function createScene(canvas: HTMLCanvasElement): SceneRefs {
     applyVisualLevel,
     intensity: () => visualIntensity(currentLevel),
     cycleCameraAngle,
+    setFlyOverMode,
   };
 }
 

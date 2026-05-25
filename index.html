@@ -20,6 +20,8 @@
          autoplay is best-effort — most browsers block until the user has
          interacted with the page, so main.ts also retries on first input. -->
     <audio id="bgmAudio" src="Mythic Ironlight.mp3" preload="auto" loop autoplay></audio>
+    <!-- Credits-screen music — swapped in when the credits roll. -->
+    <audio id="creditsAudio" src="Final Click V.mp3" preload="auto" loop></audio>
 
     <!-- HUD overlay -->
     <div id="hud">
@@ -122,6 +124,96 @@
         </h1>
       </div>
       <button id="startButton" class="start-button" type="button">START</button>
+      <button id="creditsButton" class="credits-link" type="button">CREDITS</button>
+    </div>
+
+    <!-- Credits overlay — rolls content vertically over the live scene -->
+    <div id="creditsScreen" class="hidden" aria-hidden="true">
+      <div class="credits-roll" id="creditsRoll">
+        <h2 class="credits-title">Final Click V</h2>
+
+        <div class="credits-section">
+          <div class="credits-role">Original Idea</div>
+          <div class="credits-name">Tim Numan &amp; Kasper Boonstra</div>
+          <div class="credits-meta">2012</div>
+        </div>
+
+        <div class="credits-section">
+          <div class="credits-role">Prompting</div>
+          <div class="credits-name">Tim Numan</div>
+        </div>
+
+        <div class="credits-divider">— Programming —</div>
+
+        <div class="credits-section"><div class="credits-role">Engine Integration</div><div class="credits-name">Claude Code</div></div>
+        <div class="credits-section"><div class="credits-role">3D Scene Construction</div><div class="credits-name">Claude Code</div></div>
+        <div class="credits-section"><div class="credits-role">Shader Programming</div><div class="credits-name">Claude Code</div></div>
+        <div class="credits-section"><div class="credits-role">Visual Effects Director</div><div class="credits-name">Claude Code</div></div>
+        <div class="credits-section"><div class="credits-role">Particle Wrangler</div><div class="credits-name">Claude Code</div></div>
+        <div class="credits-section"><div class="credits-role">Lens Flare Curator</div><div class="credits-name">Claude Code</div></div>
+        <div class="credits-section"><div class="credits-role">Slash Animation Choreographer</div><div class="credits-name">Claude Code</div></div>
+        <div class="credits-section"><div class="credits-role">Cinematic Camera Operator</div><div class="credits-name">Claude Code</div></div>
+
+        <div class="credits-divider">— World Building —</div>
+
+        <div class="credits-section"><div class="credits-role">Grass Field Cultivation</div><div class="credits-name">Claude Code</div></div>
+        <div class="credits-section"><div class="credits-role">Mountain Sculpting</div><div class="credits-name">Claude Code</div></div>
+        <div class="credits-section"><div class="credits-role">Faceted Rock Department</div><div class="credits-name">Claude Code</div></div>
+        <div class="credits-section"><div class="credits-role">Sky Painter</div><div class="credits-name">Claude Code</div></div>
+        <div class="credits-section"><div class="credits-role">Sun &amp; Lens Flare Operator</div><div class="credits-name">Claude Code</div></div>
+        <div class="credits-section"><div class="credits-role">Wind Simulation</div><div class="credits-name">Claude Code</div></div>
+
+        <div class="credits-divider">— Audio —</div>
+
+        <div class="credits-section"><div class="credits-role">Procedural Sound Design</div><div class="credits-name">Claude Code</div></div>
+        <div class="credits-section"><div class="credits-role">Hammer Foley</div><div class="credits-name">Claude Code</div></div>
+        <div class="credits-section"><div class="credits-role">Thunder Department</div><div class="credits-name">Claude Code</div></div>
+        <div class="credits-section"><div class="credits-role">Orchestra Hit Composer</div><div class="credits-name">Claude Code</div></div>
+        <div class="credits-section"><div class="credits-role">Audio Bus Routing</div><div class="credits-name">Claude Code</div></div>
+
+        <div class="credits-divider">— Game Design —</div>
+
+        <div class="credits-section"><div class="credits-role">Game Designer</div><div class="credits-name">Claude Code</div></div>
+        <div class="credits-section"><div class="credits-role">Combat Choreographer</div><div class="credits-name">Claude Code</div></div>
+        <div class="credits-section"><div class="credits-role">Elemental Progression Tuner</div><div class="credits-name">Claude Code</div></div>
+        <div class="credits-section"><div class="credits-role">Recovery Window Balancer</div><div class="credits-name">Claude Code</div></div>
+        <div class="credits-section"><div class="credits-role">Hit Category Statistician</div><div class="credits-name">Claude Code</div></div>
+
+        <div class="credits-divider">— Interface —</div>
+
+        <div class="credits-section"><div class="credits-role">HUD Layout</div><div class="credits-name">Claude Code</div></div>
+        <div class="credits-section"><div class="credits-role">Beveled Typography</div><div class="credits-name">Claude Code</div></div>
+        <div class="credits-section"><div class="credits-role">Stats Panel Engineering</div><div class="credits-name">Claude Code</div></div>
+        <div class="credits-section"><div class="credits-role">Recovery Bar UX</div><div class="credits-name">Claude Code</div></div>
+        <div class="credits-section"><div class="credits-role">Mute Button Industrial Design</div><div class="credits-name">Claude Code</div></div>
+
+        <div class="credits-divider">— Tools &amp; Build —</div>
+
+        <div class="credits-section"><div class="credits-role">TypeScript Whisperer</div><div class="credits-name">Claude Code</div></div>
+        <div class="credits-section"><div class="credits-role">Vite Configuration</div><div class="credits-name">Claude Code</div></div>
+        <div class="credits-section"><div class="credits-role">GitHub Actions Pipeline</div><div class="credits-name">Claude Code</div></div>
+        <div class="credits-section"><div class="credits-role">Asset Pipeline</div><div class="credits-name">Claude Code</div></div>
+
+        <div class="credits-divider">— Quality Assurance —</div>
+
+        <div class="credits-section"><div class="credits-role">Headless Playwright Tester</div><div class="credits-name">Claude Code</div></div>
+        <div class="credits-section"><div class="credits-role">Screenshot Photographer</div><div class="credits-name">Claude Code</div></div>
+        <div class="credits-section"><div class="credits-role">Bug Wrangler</div><div class="credits-name">Claude Code</div></div>
+
+        <div class="credits-divider">— Meta —</div>
+
+        <div class="credits-section"><div class="credits-role">Credits Roll Director</div><div class="credits-name">Claude Code</div></div>
+        <div class="credits-section"><div class="credits-role">Self-Aware Credit Writer</div><div class="credits-name">Claude Code</div></div>
+
+        <div class="credits-thanks">
+          <div class="credits-divider">— Powered by —</div>
+          <div class="credits-name">Babylon.js · Vite · TypeScript</div>
+          <div class="credits-name">Web Audio API · CSS</div>
+        </div>
+
+        <div class="credits-final">Thank you for clicking.</div>
+      </div>
+      <button id="creditsClose" class="credits-close" type="button" aria-label="Close credits">×</button>
     </div>
 
     <script type="module" src="/src/main.ts"></script>

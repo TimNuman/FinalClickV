@@ -130,6 +130,141 @@ body {
   font-size: 11px;
 }
 
+/* ===== CREDITS SCREEN ===== */
+#creditsScreen {
+  position: fixed;
+  inset: 0;
+  z-index: 150;
+  overflow: hidden;
+  background:
+    linear-gradient(to bottom,
+      rgba(0, 0, 0, 0.92) 0%,
+      rgba(0, 0, 0, 0.25) 18%,
+      rgba(0, 0, 0, 0.05) 50%,
+      rgba(0, 0, 0, 0.25) 82%,
+      rgba(0, 0, 0, 0.92) 100%);
+  color: #fff;
+  pointer-events: auto;
+  transition: opacity 0.6s ease, visibility 0.6s ease;
+}
+#creditsScreen.hidden {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.credits-roll {
+  position: absolute;
+  top: 100vh;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(560px, 90vw);
+  text-align: center;
+  font-weight: 600;
+  letter-spacing: 1.5px;
+  animation: creditsRoll 90s linear forwards;
+}
+@keyframes creditsRoll {
+  from { top: 100vh; }
+  to   { top: -240vh; }
+}
+
+.credits-title {
+  font-family: "Playfair Display", Georgia, serif;
+  font-style: italic;
+  font-weight: 900;
+  font-size: clamp(48px, 7vw, 96px);
+  color: #fde047;
+  text-shadow:
+    0 0 24px rgba(251, 191, 36, 0.7),
+    0 4px 16px rgba(0, 0, 0, 0.8);
+  -webkit-text-stroke: 1.5px rgba(78, 33, 6, 0.9);
+  margin: 0 0 60px;
+}
+.credits-section { margin: 0 0 40px; }
+.credits-role {
+  font-size: 12px;
+  letter-spacing: 4px;
+  text-transform: uppercase;
+  color: #94a3b8;
+  margin-bottom: 6px;
+}
+.credits-name {
+  font-size: clamp(20px, 2.6vw, 30px);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: #fef3c7;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.75);
+  line-height: 1.2;
+}
+.credits-meta {
+  font-size: 13px;
+  color: #cbd5e1;
+  margin-top: 4px;
+  letter-spacing: 3px;
+}
+.credits-divider {
+  margin: 60px 0 30px;
+  font-size: 14px;
+  letter-spacing: 6px;
+  text-transform: uppercase;
+  color: #fbbf24;
+  text-shadow: 0 0 10px rgba(251, 191, 36, 0.5);
+}
+.credits-thanks { margin: 70px 0 40px; }
+.credits-final {
+  margin: 80px 0 200px;
+  font-family: "Playfair Display", Georgia, serif;
+  font-style: italic;
+  font-size: clamp(20px, 3vw, 32px);
+  color: #fde68a;
+  text-shadow: 0 2px 16px rgba(0, 0, 0, 0.8);
+}
+
+.credits-close {
+  position: fixed;
+  top: max(16px, env(safe-area-inset-top));
+  right: max(16px, env(safe-area-inset-right));
+  z-index: 160;
+  width: 42px;
+  height: 42px;
+  background: rgba(10, 12, 20, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 50%;
+  color: #f1f5f9;
+  font-size: 28px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+.credits-close:hover { background: rgba(20, 24, 38, 0.9); }
+
+/* "CREDITS" link button below the START on the start screen */
+.credits-link {
+  margin-top: 18px;
+  padding: 8px 24px;
+  background: transparent;
+  border: 1px solid rgba(253, 230, 138, 0.35);
+  border-radius: 8px;
+  color: rgba(253, 230, 138, 0.85);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 4px;
+  font-style: italic;
+  cursor: pointer;
+  -webkit-user-select: none;
+  user-select: none;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+.credits-link:hover {
+  background: rgba(253, 230, 138, 0.1);
+  color: #fef3c7;
+  border-color: rgba(253, 230, 138, 0.6);
+}
+
 /* ===== MUTE BUTTON ===== */
 .mute-button {
   position: fixed;

@@ -124,6 +124,75 @@ function beginGame() {
   ensureAudioSystem()?.playStartButton();
   startScreen.classList.add("hidden");
 }
+
+// === Credits screen ===
+const creditsScreen = document.getElementById("creditsScreen") as HTMLElement | null;
+const creditsButton = document.getElementById("creditsButton") as HTMLButtonElement | null;
+const creditsClose  = document.getElementById("creditsClose")  as HTMLButtonElement | null;
+const creditsRoll   = document.getElementById("creditsRoll")   as HTMLElement | null;
+const creditsAudio  = document.getElementById("creditsAudio")  as HTMLAudioElement | null;
+let creditsOpen = false;
+
+const openCredits = () => {
+  if (creditsOpen || !creditsScreen) return;
+  creditsOpen = true;
+  startScreen.classList.add("hidden");
+  creditsScreen.classList.remove("hidden");
+  creditsScreen.setAttribute("aria-hidden", "false");
+  // Swap music: pause main bgm, start credits track from the top
+  if (bgm) { bgm.pause(); }
+  if (creditsAudio) {
+    creditsAudio.muted = muted;
+    creditsAudio.currentTime = 0;
+    void creditsAudio.play().catch(() => { /* may be blocked on first run */ });
+  }
+  // Restart the roll animation so it always starts from the bottom
+  if (creditsRoll) {
+    creditsRoll.style.animation = "none";
+    void creditsRoll.offsetWidth; // force reflow so re-adding animation works
+    creditsRoll.style.animation = "";
+  }
+  // Cinematic camera fly-overs while the credits scroll
+  refs.setFlyOverMode(true);
+};
+
+const closeCredits = () => {
+  if (!creditsOpen || !creditsScreen) return;
+  creditsOpen = false;
+  creditsScreen.classList.add("hidden");
+  creditsScreen.setAttribute("aria-hidden", "true");
+  refs.setFlyOverMode(false);
+  if (creditsAudio) { creditsAudio.pause(); }
+  if (bgm) { bgm.muted = muted; void bgm.play().catch(() => { /* ignore */ }); }
+  // Return to the start screen if the game hasn't actually begun yet
+  if (!gameStarted) startScreen.classList.remove("hidden");
+};
+
+creditsButton?.addEventListener("click", (e) => {
+  e.stopPropagation();
+  openCredits();
+});
+creditsClose?.addEventListener("click", (e) => {
+  e.stopPropagation();
+  closeCredits();
+});
+// Esc dismisses; auto-close when the roll finishes
+window.addEventListener("keydown", (e) => {
+  if (creditsOpen && e.code === "Escape") closeCredits();
+});
+creditsRoll?.addEventListener("animationend", () => {
+  if (creditsOpen) closeCredits();
+});
+
+// Once the AudioSystem exists (on first user input), wire the credits track
+// through the same musicGain bus so the mute button silences it too.
+const attachCreditsTrack = () => {
+  if (audio && creditsAudio) audio.attachMusic(creditsAudio);
+  document.removeEventListener("pointerdown", attachCreditsTrack, true);
+  document.removeEventListener("keydown", attachCreditsTrack, true);
+};
+document.addEventListener("pointerdown", attachCreditsTrack, true);
+document.addEventListener("keydown", attachCreditsTrack, true);
 startButton.addEventListener("click", beginGame);
 // Also allow Enter/Space on the focused start button (default browser behaviour
 // would trigger a click, but listen explicitly so Space doesn't also fire a
